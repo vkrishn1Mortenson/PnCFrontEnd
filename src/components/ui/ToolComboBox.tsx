@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { Check, ChevronsUpDown } from "lucide-react"
-
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,30 +18,22 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-const frameworks = [
+const tools = [
   {
-    value: "next.js",
-    label: "Next.js",
+    value: "components",
+    label: "Components",
   },
   {
     value: "sveltekit",
     label: "SvelteKit",
   },
-  {
-    value: "nuxt.js",
-    label: "Nuxt.js",
-  },
-  {
-    value: "remix",
-    label: "Remix",
-  },
-  {
-    value: "astro",
-    label: "Astro",
-  },
 ]
 
-export function ComboboxDemo() {
+type ToolComboBoxProps = {
+  onToolSelect: (tool: string) => void
+}
+
+export function ComboboxDemo({ onToolSelect }: ToolComboBoxProps) {
   const [open, setOpen] = React.useState(false)
   const [value, setValue] = React.useState("")
 
@@ -56,33 +47,44 @@ export function ComboboxDemo() {
           className="w-[200px] justify-between"
         >
           {value
-            ? frameworks.find((framework) => framework.value === value)?.label
+            ? tools.find((tool) => tool.value === value)?.label
             : "Tools"}
+
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
+
       <PopoverContent className="w-[200px] p-0">
         <Command>
-          <CommandInput placeholder="Tools" />
+          <CommandInput placeholder="Search tools..." />
+
           <CommandList>
-            <CommandEmpty>No framework found.</CommandEmpty>
+            <CommandEmpty>No tool found.</CommandEmpty>
+
             <CommandGroup>
-              {frameworks.map((framework) => (
+              {tools.map((tool) => (
                 <CommandItem
-                  key={framework.value}
-                  value={framework.value}
+                  key={tool.value}
+                  value={tool.value}
                   onSelect={(currentValue) => {
-                    setValue(currentValue === value ? "" : currentValue)
+                    const newValue =
+                      currentValue === value ? "" : currentValue
+
+                    setValue(newValue)
+                    onToolSelect(newValue)
                     setOpen(false)
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      value === framework.value ? "opacity-100" : "opacity-0"
+                      value === tool.value
+                        ? "opacity-100"
+                        : "opacity-0"
                     )}
                   />
-                  {framework.label}
+
+                  {tool.label}
                 </CommandItem>
               ))}
             </CommandGroup>
