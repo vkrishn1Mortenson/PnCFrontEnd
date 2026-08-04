@@ -1,275 +1,174 @@
-"use client";
-
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { FloatingDockDemo } from "@/components/ui/FloatingDock";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  IconArrowDownRight,
-  IconArrowUpRight,
-  IconCheck,
-  IconFile,
-  IconFolder,
-  IconGitCompare,
-} from "@tabler/icons-react";
+  CardBody,
+  CardContainer,
+  CardItem,
+} from "@/components/ui/3d-card";
 
-const dashboardMetrics = [
-  {
-    title: "Active Projects",
-    value: "14",
-    change: "+3",
-    trend: "up",
-    summary: "Projects updated today",
-    description: "Engineering projects currently being processed",
-    icon: IconFolder,
-  },
-  {
-    title: "Sources Processed",
-    value: "12,847",
-    change: "+10.5%",
-    trend: "up",
-    summary: "1,342 processed this week",
-    description: "Drawings, specifications, BOMs, and source files",
-    icon: IconFile,
-  },
-  {
-    title: "Open Conflicts",
-    value: "214",
-    change: "-8.2%",
-    trend: "down",
-    summary: "32 require priority review",
-    description: "Engineering values awaiting a decision",
-    icon: IconGitCompare,
-  },
-  {
-    title: "Approved Objects",
-    value: "47,532",
-    change: "+5.1%",
-    trend: "up",
-    summary: "2,341 approved this week",
-    description: "Objects available in the approved engineering model",
-    icon: IconCheck,
-  },
-];
+interface Project {
+  project_id: string | null;
+  project_code: string | null;
+  project_name: string | null;
+  project_abbreviation: string | null;
+  generation_type: string | null;
+  location: string | null;
+  iso: string | null;
+  base_temperature_f: number | null;
+  elevation_ft: number | null;
+  status: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
 
-const projects = [
-  {
-    name: "Substation Expansion — Minneapolis",
-    status: "Needs Review",
-    sources: "124",
-    components: "4,231",
-    conflicts: "84",
-    progress: "78%",
-  },
-  {
-    name: "Solar Farm Protection Upgrade",
-    status: "In Progress",
-    sources: "342",
-    components: "9,812",
-    conflicts: "14",
-    progress: "57%",
-  },
-  {
-    name: "Relay Replacement Program",
-    status: "Gold Approved",
-    sources: "231",
-    components: "3,421",
-    conflicts: "0",
-    progress: "100%",
-  },
-];
+interface ActiveProjectsResponse {
+  count: number;
+  projects: Project[];
+  hasNextPage: boolean;
+  endCursor: string | null;
+}
 
-export default function Dashboard() {
+export default function Projects() {
+  const navigate = useNavigate();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function loadProjects() {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("http://127.0.0.1:5000/");
+
+      if (!response.ok) {
+        const responseText = await response.text();
+
+        throw new Error(
+          `Request failed: ${response.status} ${responseText}`
+        );
+      }
+
+      const data: ActiveProjectsResponse = await response.json();
+
+      setProjects(data.projects ?? []);
+      setHasLoaded(true);
+    } catch (requestError: unknown) {
+      setHasLoaded(true);
+
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Could not load active projects"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-black text-white">
-      <main className="flex-1 px-6 py-8 pb-32 lg:px-10">
-        <section className="mb-8">
-          <p className="mb-2 text-sm font-medium uppercase tracking-[0.2em] text-blue-500">
-            P&C Automation
-          </p>
+    <div className="min-h-screen">
+      <CardContainer className="inter-var">
+        <CardBody className="relative h-auto w-auto rounded-xl border border-black/[0.1] bg-gray-50 p-6 group/card sm:w-[30rem] dark:border-white/[0.2] dark:bg-black dark:hover:shadow-2xl dark:hover:shadow-emerald-500/[0.1]">
+          <CardItem
+            translateZ="50"
+            className="text-xl font-bold text-neutral-600 dark:text-white"
+          >
+            Currently Active Projects
+          </CardItem>
 
-          <h1 className="text-3xl font-semibold tracking-tight">
-            Engineering Dashboard
-          </h1>
+          <CardItem
+            as="p"
+            translateZ="60"
+            className="mt-2 max-w-sm text-sm text-neutral-500 dark:text-neutral-300"
+          >
+            Load active projects and click Details to view more information.
+          </CardItem>
 
-          <p className="mt-2 text-sm text-zinc-400">
-            Monitor engineering sources, conflicts, decisions, and approved
-            project data.
-          </p>
-        </section>
+          <CardItem
+            as="div"
+            translateZ="60"
+            className="mt-6 w-full"
+          >
+            <button
+              type="button"
+              onClick={() => void loadProjects()}
+              disabled={loading}
+              className="mb-4 rounded-xl bg-black px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black"
+            >
+              {loading ? "Loading..." : "Load Active Projects"}
+            </button>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {dashboardMetrics.map((metric) => {
-            const MetricIcon = metric.icon;
-            const TrendIcon =
-              metric.trend === "up"
-                ? IconArrowUpRight
-                : IconArrowDownRight;
+            {loading && (
+              <p className="text-gray-500">
+                Loading projects...
+              </p>
+            )}
 
-            return (
-              <Card
-                key={metric.title}
-                className="border-zinc-800 bg-gradient-to-b from-zinc-900 to-zinc-950 text-white shadow-none transition-colors hover:border-blue-600/70"
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex size-10 items-center justify-center rounded-lg border border-blue-500/20 bg-blue-600/10 text-blue-500">
-                        <MetricIcon size={21} stroke={1.8} />
-                      </div>
+            {error && (
+              <p className="break-words text-red-500">
+                {error}
+              </p>
+            )}
 
-                      <CardTitle className="text-sm font-medium text-zinc-300">
-                        {metric.title}
-                      </CardTitle>
-                    </div>
+            {hasLoaded &&
+              !loading &&
+              !error &&
+              projects.length === 0 && (
+                <p className="text-gray-500">
+                  No active projects
+                </p>
+              )}
 
-                    <Badge
-                      variant="outline"
-                      className="gap-1 rounded-full border-zinc-700 bg-black/40 text-xs text-white"
-                    >
-                      <TrendIcon size={13} />
-                      {metric.change}
-                    </Badge>
-                  </div>
-                </CardHeader>
+            <div className="space-y-4">
+              {projects.map((project) => {
+                const projectKey =
+                  project.project_id ??
+                  project.project_code ??
+                  project.project_name ??
+                  "unknown-project";
 
-                <CardContent>
-                  <div className="text-3xl font-semibold tracking-tight">
-                    {metric.value}
-                  </div>
+                return (
+                  <div
+                    key={projectKey}
+                    className="rounded-lg border border-gray-200 p-4 dark:border-gray-700"
+                  >
+                    <h2 className="text-lg font-semibold text-green-500">
+                      {project.project_name ?? "Unnamed project"}
+                    </h2>
 
-                  <div className="mt-7 flex items-center gap-2 text-sm font-medium">
-                    <TrendIcon
-                      size={16}
-                      className={
-                        metric.trend === "up"
-                          ? "text-blue-500"
-                          : "text-zinc-400"
+                    <p className="text-sm text-gray-500">
+                      Code: {project.project_code ?? "N/A"}
+                    </p>
+
+                    <p className="text-sm text-gray-500">
+                      Location: {project.location ?? "N/A"}
+                    </p>
+
+                    <p className="text-sm text-gray-500">
+                      Type: {project.generation_type ?? "N/A"}
+                    </p>
+
+                    <button
+                      type="button"
+                      className="mt-4 rounded-xl bg-black px-4 py-2 text-xs font-bold text-white dark:bg-white dark:text-black"
+                      onClick={() =>
+                        navigate("/Projects", { state: { project } })
                       }
-                    />
-                    <span>{metric.summary}</span>
+                    >
+                      Details
+                    </button>
                   </div>
+                );
+              })}
+            </div>
+          </CardItem>
+        </CardBody>
+      </CardContainer>
 
-                  <CardDescription className="mt-2 text-sm leading-5 text-zinc-500">
-                    {metric.description}
-                  </CardDescription>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </section>
-
-        <section className="mt-6 grid gap-6 xl:grid-cols-[1.4fr_0.6fr]">
-          <Card className="border-zinc-800 bg-zinc-950 text-white shadow-none">
-            <CardHeader>
-              <CardTitle>Projects Requiring Attention</CardTitle>
-              <CardDescription className="text-zinc-500">
-                Projects containing unresolved engineering conflicts.
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent className="space-y-3">
-              {projects.map((project) => (
-                <div
-                  key={project.name}
-                  className="grid gap-4 rounded-xl border border-zinc-800 bg-black p-4 transition-colors hover:border-blue-600/60 md:grid-cols-[1fr_auto]"
-                >
-                  <div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h3 className="font-medium">{project.name}</h3>
-
-                      <Badge
-                        variant="outline"
-                        className="border-blue-500/30 bg-blue-500/10 text-blue-400"
-                      >
-                        {project.status}
-                      </Badge>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
-                      <span className="text-zinc-500">
-                        Sources{" "}
-                        <strong className="ml-1 text-zinc-200">
-                          {project.sources}
-                        </strong>
-                      </span>
-
-                      <span className="text-zinc-500">
-                        Components{" "}
-                        <strong className="ml-1 text-zinc-200">
-                          {project.components}
-                        </strong>
-                      </span>
-
-                      <span className="text-zinc-500">
-                        Conflicts{" "}
-                        <strong className="ml-1 text-blue-400">
-                          {project.conflicts}
-                        </strong>
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex min-w-28 items-center justify-end">
-                    <span className="text-2xl font-semibold text-blue-500">
-                      {project.progress}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="border-zinc-800 bg-zinc-950 text-white shadow-none">
-            <CardHeader>
-              <CardTitle>Engineering Pipeline</CardTitle>
-              <CardDescription className="text-zinc-500">
-                Current project-data workflow.
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent>
-              <div className="space-y-6">
-                {[
-                  ["Bronze", "Source evidence", "100%"],
-                  ["Silver", "Extracted model", "82%"],
-                  ["Review", "Conflict decisions", "64%"],
-                  ["Gold", "Approved model", "41%"],
-                ].map(([layer, label, progress]) => (
-                  <div key={layer}>
-                    <div className="mb-2 flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium">{layer}</p>
-                        <p className="text-xs text-zinc-500">{label}</p>
-                      </div>
-
-                      <span className="text-sm font-medium text-blue-400">
-                        {progress}
-                      </span>
-                    </div>
-
-                    <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
-                      <div
-                        className="h-full rounded-full bg-blue-600"
-                        style={{ width: progress }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-      </main>
-
-      <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
-        <FloatingDockDemo />
-      </div>
+      <FloatingDockDemo />
     </div>
   );
 }

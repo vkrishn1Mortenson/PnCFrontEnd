@@ -1,2 +1,2 @@
-FLASK_APP=base.py
+FLASK_APP=activeprojects
 FLASK_ENV=development
