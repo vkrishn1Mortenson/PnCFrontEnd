@@ -1,6 +1,3 @@
-"use client"
-
-import * as React from "react"
 import { Settings } from "lucide-react"
 import mortensonLogo from "@/assets/images.jpg"
 import { ComboboxDemo } from "@/components/ui/ToolComboBox"
@@ -16,24 +13,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
-const components = [
-  {
-    id: "breaker",
-    name: "Breaker",
-  },
-  {
-    id: "transformer",
-    name: "Transformer",
-  },
-  {
-    id: "relay",
-    name: "Relay",
-  },
-]
-
 export function AppSidebar() {
-  const [selectedTool, setSelectedTool] = React.useState("")
-
   return (
     <Sidebar>
       <SidebarHeader>
@@ -59,21 +39,10 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
-            <div className="p-2">
-              <ComboboxDemo onToolSelect={setSelectedTool} />
-            </div>
 
-            {selectedTool === "components" && (
-              <SidebarMenu>
-                {components.map((component) => (
-                  <SidebarMenuItem key={component.id}>
-                    <SidebarMenuButton>
-                      {component.name}
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            )}
+            <div className="p-2">
+              <ComboboxDemo />
+            </div>
 
             <SidebarMenu>
               <SidebarMenuItem>
