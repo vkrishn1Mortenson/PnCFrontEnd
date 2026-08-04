@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { FloatingDockDemo } from "@/components/ui/FloatingDock";
 import {
   CardBody,
   CardContainer,
   CardItem,
 } from "@/components/ui/3d-card";
+import { Link } from 'react-router-dom';
 
 interface Project {
   project_id: string | null;
@@ -29,12 +29,16 @@ interface ActiveProjectsResponse {
   endCursor: string | null;
 }
 
+
+
 export default function Projects() {
-  const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] =
+    useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
 
   async function loadProjects() {
     setLoading(true);
@@ -121,6 +125,12 @@ export default function Projects() {
                   No active projects
                 </p>
               )}
+            
+            <Link to="/projects">
+              <button className ="mb-4 rounded-xl bg-black px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black">
+                View components
+              </button>
+            </Link>
 
             <div className="space-y-4">
               {projects.map((project) => {
@@ -129,6 +139,9 @@ export default function Projects() {
                   project.project_code ??
                   project.project_name ??
                   "unknown-project";
+
+                const isSelected =
+                  selectedProjectId === projectKey;
 
                 return (
                   <div
@@ -151,15 +164,59 @@ export default function Projects() {
                       Type: {project.generation_type ?? "N/A"}
                     </p>
 
+                    <p className="text-sm text-gray-500">
+                      ISO: {project.iso ?? "N/A"}
+                    </p>
+                    
+                    
+
                     <button
                       type="button"
                       className="mt-4 rounded-xl bg-black px-4 py-2 text-xs font-bold text-white dark:bg-white dark:text-black"
                       onClick={() =>
-                        navigate("/Projects", { state: { project } })
+                        setSelectedProjectId(
+                          isSelected ? null : projectKey
+                        )
                       }
                     >
-                      Details
+                      {isSelected ? "Hide Details" : "Details"}
                     </button>
+
+                    {isSelected && (
+                      <div className="mt-4 space-y-1 text-sm text-gray-600 dark:text-gray-300">
+                        <p>
+                          Project ID:{" "}
+                          {project.project_id ?? "N/A"}
+                        </p>
+
+                        <p>
+                          Abbreviation:{" "}
+                          {project.project_abbreviation ?? "N/A"}
+                        </p>
+
+                        <p>
+                          ISO: {project.iso ?? "N/A"}
+                        </p>
+
+                        <p>
+                          Status: {project.status ?? "N/A"}
+                        </p>
+
+                        <p>
+                          Base temperature:{" "}
+                          {project.base_temperature_f !== null
+                            ? `${project.base_temperature_f} °F`
+                            : "N/A"}
+                        </p>
+
+                        <p>
+                          Elevation:{" "}
+                          {project.elevation_ft !== null
+                            ? `${project.elevation_ft} ft`
+                            : "N/A"}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -171,4 +228,4 @@ export default function Projects() {
       <FloatingDockDemo />
     </div>
   );
-}
+}        

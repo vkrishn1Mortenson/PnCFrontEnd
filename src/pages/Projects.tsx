@@ -1,14 +1,6 @@
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+"use client";
 
-import { Label } from "@/components/ui/label";
+import { useEffect, useState } from "react";
 
 import {
   Select,
@@ -17,64 +9,226 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { FloatingDockDemo } from "@/components/ui/FloatingDock";
 
 
+interface RelationshipComponent {
+  component_id: string;
+  display_name: string;
+  component_tag: string;
+  component_type: string;
+}
 
-"use client";
+interface ComponentRecord {
+  component_id: string;
+  parent_component_id: string | null;
+  component_tag: string;
+  display_name: string;
+  component_type: string;
+  component_subtype: string;
+  component_class: string;
 
-import React from "react";
-import { CardBody, CardContainer, CardItem } from "@/components/ui/3d-card";
+  parent_component: RelationshipComponent | null;
+  children: RelationshipComponent[];
+}
 
 export default function Projects() {
-  return (
-    <div className="min-h-screen">
-    <CardContainer className="inter-var">
-      <CardBody className="bg-gray-50 relative group/card  dark:hover:shadow-2xl dark:hover:shadow-emerald-500/[0.1] dark:bg-black dark:border-white/[0.2] border-black/[0.1] w-auto sm:w-[30rem] h-auto rounded-xl p-6 border  ">
-        <CardItem
-          translateZ="50"
-          className="text-xl font-bold text-neutral-600 dark:text-white"
-        >
-          Example Components view / projects view TBD
-        </CardItem>
-        <CardItem
-          as="p"
-          translateZ="60"
-          className="text-neutral-500 text-sm max-w-sm mt-2 dark:text-neutral-300"
-        >
-          Description to components or projects  
-        </CardItem>
-        <CardItem translateZ="100" className="w-full mt-4">
-          <img
-            src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=2560&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-            height="1000"
-            width="1000"
-            className="h-60 w-full object-cover rounded-xl group-hover/card:shadow-xl"
-            alt="thumbnail"
-          />
-        </CardItem>
-        <div className="flex justify-between items-center mt-20">
-          <CardItem
-            translateZ={20}
-            as="a"
-            href="https://twitter.com/mannupaaji"
-            target="__blank"
-            className="px-4 py-2 rounded-xl text-xs font-normal dark:text-white"
-          >
-          Cancel
-          </CardItem>
-          <CardItem
-            translateZ={20}
-            as="button"
-            className="px-4 py-2 rounded-xl bg-black dark:bg-white dark:text-black text-white text-xs font-bold"
-          >
-            Accept
-          </CardItem>
-        </div>
-      </CardBody>
-    </CardContainer>
-    <FloatingDockDemo />    
+  const [components, setComponents] = useState<ComponentRecord[]>([]);
+  const [selectedView, setSelectedView] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("http://localhost:5000/components")
+      .then((res) => res.json())
+      
+      .then((data) => {
+        console.log("COMPONENT DATA:", data.components);
+        console.log("COMPONENT COUNT:", data.components?.length);
+        setComponents(data.components || []);
+      })
+      .catch((err) => {
+        console.error("Failed to load component relationships:", err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-xl">
+        Loading component relationships...
+      </div>
+    );
+  }
+  console.log("RENDERING COMPONENTS:", components.length);
+ return (
+  <div className="min-h-screen px-8 py-8">
+    <div className="mb-8">
+      <h1 className="text-3xl font-bold">
+        Component Relationships
+      </h1>
+
+      <p className="text-muted-foreground mt-2">
+        Total Components: {components.length}
+      </p>
     </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      {components.map((component) => (
+        <Card
+          key={component.component_id}
+          className="h-fit hover:shadow-lg transition-shadow"
+        >
+          <CardHeader>
+            <CardTitle>
+              {component.display_name || "Unnamed Component"}
+            </CardTitle>
+
+            <CardDescription>
+              {component.component_type || "Unknown Type"}
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border p-4 space-y-2">
+              <div>
+                <span className="font-semibold">Tag:</span>{" "}
+                {component.component_tag || "N/A"}
+              </div>
+
+              <div>
+                <span className="font-semibold">Class:</span>{" "}
+                {component.component_class || "N/A"}
+              </div>
+
+              <div>
+                <span className="font-semibold">Subtype:</span>{" "}
+                {component.component_subtype || "N/A"}
+              </div>
+
+              <div>
+                <span className="font-semibold">Component ID:</span>{" "}
+                {component.component_id}
+              </div>
+
+              <div>
+                <span className="font-semibold">Children:</span>{" "}
+                {component.children.length}
+              </div>
+            </div>
+
+            <Select
+              value={selectedView[component.component_id] || ""}
+              onValueChange={(value) =>
+                setSelectedView((prev) => ({
+                  ...prev,
+                  [component.component_id]: value ?? "",
+                }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="View Relationships" />
+              </SelectTrigger>
+
+              <SelectContent>
+                <SelectItem value="parent">
+                  Parent Component
+                </SelectItem>
+
+                <SelectItem value="children">
+                  Child Components
+                </SelectItem>
+              </SelectContent>
+            </Select>
+
+            {selectedView[component.component_id] === "parent" && (
+              <div className="rounded-lg border p-4">
+                <h3 className="font-semibold mb-3">
+                  Parent Component
+                </h3>
+
+                {component.parent_component ? (
+                  <div className="space-y-1 text-sm">
+                    <div>
+                      <strong>Name:</strong>{" "}
+                      {component.parent_component.display_name}
+                    </div>
+
+                    <div>
+                      <strong>Tag:</strong>{" "}
+                      {component.parent_component.component_tag}
+                    </div>
+
+                    <div>
+                      <strong>Type:</strong>{" "}
+                      {component.parent_component.component_type}
+                    </div>
+
+                    <div>
+                      <strong>ID:</strong>{" "}
+                      {component.parent_component.component_id}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">
+                    No parent component.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {selectedView[component.component_id] === "children" && (
+              <div className="rounded-lg border p-4">
+                <h3 className="font-semibold mb-3">
+                  Child Components
+                </h3>
+
+                {component.children.length > 0 ? (
+                  <div className="space-y-2">
+                    {component.children.map((child) => (
+                      <div
+                        key={child.component_id}
+                        className="rounded-md border p-3"
+                      >
+                        <div className="font-medium">
+                          {child.display_name}
+                        </div>
+
+                        <div className="text-sm text-muted-foreground">
+                          Tag: {child.component_tag}
+                        </div>
+
+                        <div className="text-sm text-muted-foreground">
+                          Type: {child.component_type}
+                        </div>
+
+                        <div className="text-sm text-muted-foreground">
+                          ID: {child.component_id}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">
+                    No child components found.
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+
+    <FloatingDockDemo />
+  </div>
   );
 }
