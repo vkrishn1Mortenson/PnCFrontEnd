@@ -6,6 +6,7 @@ import {
   IconExchange,
   IconHome,
   IconNewSection,
+  IconSchema,
   IconTerminal2,
 } from "@tabler/icons-react";
 
@@ -24,6 +25,13 @@ export function FloatingDockDemo() {
       <IconTerminal2 className="h-full w-full text-neutral-500 dark:text-neutral-300" />
     ),
     href: "/Projects",
+  },
+  {
+    title: "Symbols",
+    icon: (
+      <IconSchema className="h-full w-full text-neutral-500 dark:text-neutral-300" />
+    ),
+    href: "/Symbols",
   },
 ];
   return (

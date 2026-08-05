@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 
 import {
   Select,
@@ -39,19 +40,27 @@ interface ComponentRecord {
   children: RelationshipComponent[];
 }
 
+
 export default function Projects() {
   const [components, setComponents] = useState<ComponentRecord[]>([]);
   const [selectedView, setSelectedView] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [scores, setScores] = useState<string[]>([]);
 
   useEffect(() => {
     fetch("http://localhost:5000/components")
       .then((res) => res.json())
-      
       .then((data) => {
         console.log("COMPONENT DATA:", data.components);
         console.log("COMPONENT COUNT:", data.components?.length);
-        setComponents(data.components || []);
+
+        // Save the full objects array to components state
+        const rawComponents = data.components || [];
+        setComponents(rawComponents);
+
+        // Extract the display_name from each component into the scores state
+        const extractedNames = rawComponents.map((item: any) => item.display_name || "");
+        setScores(extractedNames);
       })
       .catch((err) => {
         console.error("Failed to load component relationships:", err);
@@ -61,6 +70,12 @@ export default function Projects() {
       });
   }, []);
 
+  useEffect(() => {
+    if (components.length > 0) {
+      localStorage.setItem("symbols", JSON.stringify(components));
+    }
+  }, [components]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-xl">
@@ -68,7 +83,13 @@ export default function Projects() {
       </div>
     );
   }
+
+  const storedSymbols = JSON.parse(localStorage.getItem("symbols") ?? "[]");
+
+  console.log("STORED SYMBOLS VAR:", storedSymbols);
   console.log("RENDERING COMPONENTS:", components.length);
+  console.log(`Components from Projects.tsx fetch call are ${scores}.`);
+
  return (
   <div className="min-h-screen px-8 py-8">
     <div className="mb-8">
@@ -82,6 +103,7 @@ export default function Projects() {
     </div>
 
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      
       {components.map((component) => (
         <Card
           key={component.component_id}
@@ -124,7 +146,7 @@ export default function Projects() {
                 {component.children.length}
               </div>
             </div>
-
+          
             <Select
               value={selectedView[component.component_id] || ""}
               onValueChange={(value) =>

@@ -6,6 +6,7 @@ import {
   CardItem,
 } from "@/components/ui/3d-card";
 import { Link } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
 import pic3 from "@/assets/pic3.jpg";
 interface Project {
   project_id: string | null;
@@ -38,9 +39,11 @@ export default function Projects() {
   const [loading, setLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
+  const navigate = useNavigate();
 
   async function loadProjects() {
+    
+
     setLoading(true);
     setError(null);
 
