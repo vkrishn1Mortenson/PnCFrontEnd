@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
-
+import {
+  Navigate,
+  useLocation,
+} from "react-router-dom";
 import {
   Select,
   SelectContent,
@@ -19,6 +21,11 @@ import {
 } from "@/components/ui/card";
 import { FloatingDockDemo } from "@/components/ui/FloatingDock";
 
+interface SelectedProject {
+  projectId: string | null;
+  projectCode: string | null;
+  projectName: string | null;
+}
 
 interface RelationshipComponent {
   component_id: string;
@@ -35,129 +42,191 @@ interface ComponentRecord {
   component_type: string;
   component_subtype: string;
   component_class: string;
-
   parent_component: RelationshipComponent | null;
   children: RelationshipComponent[];
 }
 
-
 export default function Projects() {
-  const [components, setComponents] = useState<ComponentRecord[]>([]);
-  const [selectedView, setSelectedView] = useState<Record<string, string>>({});
+  const location = useLocation();
+
+  const selectedProject =
+    location.state as SelectedProject | null;
+
+  const [components, setComponents] = useState<ComponentRecord[]>(
+    []
+  );
+
+  const [selectedView, setSelectedView] = useState<
+    Record<string, string>
+  >({});
+
   const [loading, setLoading] = useState(true);
   const [scores, setScores] = useState<string[]>([]);
 
   useEffect(() => {
-    fetch("http://localhost:5000/components")
-      .then((res) => res.json())
-      .then((data) => {
-        console.log("COMPONENT DATA:", data.components);
-        console.log("COMPONENT COUNT:", data.components?.length);
+    if (!selectedProject?.projectId) {
+      setLoading(false);
+      return;
+    }
 
-        // Save the full objects array to components state
-        const rawComponents = data.components || [];
+    const projectId = encodeURIComponent(
+      selectedProject.projectId
+    );
+
+    fetch(
+      `http://localhost:5000/components?project_id=${projectId}`
+    )
+      .then(async (res) => {
+        if (!res.ok) {
+          const responseText = await res.text();
+
+          throw new Error(
+            `Request failed: ${res.status} ${responseText}`
+          );
+        }
+
+        return res.json();
+      })
+      .then((data) => {
+        console.log(
+          "COMPONENT DATA:",
+          data.components
+        );
+
+        console.log(
+          "COMPONENT COUNT:",
+          data.components?.length
+        );
+
+        const rawComponents: ComponentRecord[] =
+          data.components || [];
+
         setComponents(rawComponents);
 
-        // Extract the display_name from each component into the scores state
-        const extractedNames = rawComponents.map((item: any) => item.display_name || "");
+        const extractedNames = rawComponents.map(
+          (item) => item.display_name || ""
+        );
+
         setScores(extractedNames);
       })
       .catch((err) => {
-        console.error("Failed to load component relationships:", err);
+        console.error(
+          "Failed to load component relationships:",
+          err
+        );
       })
       .finally(() => {
         setLoading(false);
       });
-  }, []);
+  }, [selectedProject?.projectId]);
 
   useEffect(() => {
     if (components.length > 0) {
-      localStorage.setItem("symbols", JSON.stringify(components));
+      localStorage.setItem(
+        "symbols",
+        JSON.stringify(components)
+      );
     }
   }, [components]);
 
+  if (!selectedProject?.projectId) {
+    return <Navigate to="/" replace />;
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-xl">
+      <div>
         Loading component relationships...
       </div>
     );
   }
 
-  const storedSymbols = JSON.parse(localStorage.getItem("symbols") ?? "[]");
+  const storedSymbols = JSON.parse(
+    localStorage.getItem("symbols") ?? "[]"
+  );
 
-  console.log("STORED SYMBOLS VAR:", storedSymbols);
-  console.log("RENDERING COMPONENTS:", components.length);
-  console.log(`Components from Projects.tsx fetch call are ${scores}.`);
+  console.log(
+    "STORED SYMBOLS VAR:",
+    storedSymbols
+  );
 
- return (
-  <div className="min-h-screen px-8 py-8">
-    <div className="mb-8">
-      <h1 className="text-3xl font-bold">
-        Component Relationships
-      </h1>
+  console.log(
+    "RENDERING COMPONENTS:",
+    components.length
+  );
 
-      <p className="text-muted-foreground mt-2">
-        Total Components: {components.length}
+  console.log(
+    `Components from Projects.tsx fetch call are ${scores}.`
+  );
+
+  return (
+    <div>
+      <FloatingDockDemo />
+
+      <h2>Component Relationships</h2>
+
+      <p>
+        Project:{" "}
+        {selectedProject.projectName ??
+          selectedProject.projectCode ??
+          selectedProject.projectId}
       </p>
-    </div>
 
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-      
+      <p>Total Components: {components.length}</p>
+
       {components.map((component) => (
-        <Card
-          key={component.component_id}
-          className="h-fit hover:shadow-lg transition-shadow"
-        >
+        <Card key={component.component_id}>
           <CardHeader>
             <CardTitle>
-              {component.display_name || "Unnamed Component"}
+              {component.display_name ||
+                "Unnamed Component"}
             </CardTitle>
 
             <CardDescription>
-              {component.component_type || "Unknown Type"}
+              {component.component_type ||
+                "Unknown Type"}
             </CardDescription>
           </CardHeader>
 
-          <CardContent className="space-y-4">
-            <div className="rounded-lg border p-4 space-y-2">
-              <div>
-                <span className="font-semibold">Tag:</span>{" "}
-                {component.component_tag || "N/A"}
-              </div>
+          <CardContent>
+            <p>
+              Tag: {component.component_tag || "N/A"}
+            </p>
 
-              <div>
-                <span className="font-semibold">Class:</span>{" "}
-                {component.component_class || "N/A"}
-              </div>
+            <p>
+              Class:{" "}
+              {component.component_class || "N/A"}
+            </p>
 
-              <div>
-                <span className="font-semibold">Subtype:</span>{" "}
-                {component.component_subtype || "N/A"}
-              </div>
+            <p>
+              Subtype:{" "}
+              {component.component_subtype || "N/A"}
+            </p>
 
-              <div>
-                <span className="font-semibold">Component ID:</span>{" "}
-                {component.component_id}
-              </div>
+            <p>
+              Component ID: {component.component_id}
+            </p>
 
-              <div>
-                <span className="font-semibold">Children:</span>{" "}
-                {component.children.length}
-              </div>
-            </div>
-          
+            <p>
+              Children: {component.children.length}
+            </p>
+
             <Select
-              value={selectedView[component.component_id] || ""}
+              value={
+                selectedView[
+                  component.component_id
+                ] ?? ""
+              }
               onValueChange={(value) =>
-                setSelectedView((prev) => ({
-                  ...prev,
-                  [component.component_id]: value ?? "",
+                setSelectedView((previous) => ({
+                  ...previous,
+                  [component.component_id]:
+                    value ?? "",
                 }))
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="View Relationships" />
+                <SelectValue placeholder="Select relationship" />
               </SelectTrigger>
 
               <SelectContent>
@@ -171,77 +240,73 @@ export default function Projects() {
               </SelectContent>
             </Select>
 
-            {selectedView[component.component_id] === "parent" && (
-              <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">
-                  Parent Component
-                </h3>
+            {selectedView[
+              component.component_id
+            ] === "parent" && (
+              <div>
+                <h4>Parent Component</h4>
 
                 {component.parent_component ? (
-                  <div className="space-y-1 text-sm">
-                    <div>
-                      <strong>Name:</strong>{" "}
-                      {component.parent_component.display_name}
-                    </div>
+                  <div>
+                    <p>
+                      Name:{" "}
+                      {
+                        component.parent_component
+                          .display_name
+                      }
+                    </p>
 
-                    <div>
-                      <strong>Tag:</strong>{" "}
-                      {component.parent_component.component_tag}
-                    </div>
+                    <p>
+                      Tag:{" "}
+                      {
+                        component.parent_component
+                          .component_tag
+                      }
+                    </p>
 
-                    <div>
-                      <strong>Type:</strong>{" "}
-                      {component.parent_component.component_type}
-                    </div>
+                    <p>
+                      Type:{" "}
+                      {
+                        component.parent_component
+                          .component_type
+                      }
+                    </p>
 
-                    <div>
-                      <strong>ID:</strong>{" "}
-                      {component.parent_component.component_id}
-                    </div>
+                    <p>
+                      ID:{" "}
+                      {
+                        component.parent_component
+                          .component_id
+                      }
+                    </p>
                   </div>
                 ) : (
-                  <div className="text-sm text-muted-foreground">
-                    No parent component.
-                  </div>
+                  <p>No parent component.</p>
                 )}
               </div>
             )}
 
-            {selectedView[component.component_id] === "children" && (
-              <div className="rounded-lg border p-4">
-                <h3 className="font-semibold mb-3">
-                  Child Components
-                </h3>
+            {selectedView[
+              component.component_id
+            ] === "children" && (
+              <div>
+                <h4>Child Components</h4>
 
                 {component.children.length > 0 ? (
-                  <div className="space-y-2">
-                    {component.children.map((child) => (
-                      <div
-                        key={child.component_id}
-                        className="rounded-md border p-3"
-                      >
-                        <div className="font-medium">
-                          {child.display_name}
-                        </div>
-
-                        <div className="text-sm text-muted-foreground">
-                          Tag: {child.component_tag}
-                        </div>
-
-                        <div className="text-sm text-muted-foreground">
-                          Type: {child.component_type}
-                        </div>
-
-                        <div className="text-sm text-muted-foreground">
-                          ID: {child.component_id}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  component.children.map((child) => (
+                    <div key={child.component_id}>
+                      <p>{child.display_name}</p>
+                      <p>
+                        Tag: {child.component_tag}
+                      </p>
+                      <p>
+                        Type: {child.component_type}
+                      </p>
+                      <p>ID: {child.component_id}</p>
+                    </div>
+                  ))
                 ) : (
-                  <div className="text-sm text-muted-foreground">
-                    No child components found.
-                  </div>
+                  <p>No child components found.</p>
                 )}
               </div>
             )}
@@ -249,8 +314,5 @@ export default function Projects() {
         </Card>
       ))}
     </div>
-
-    <FloatingDockDemo />
-  </div>
   );
 }

@@ -5,9 +5,9 @@ import {
   CardContainer,
   CardItem,
 } from "@/components/ui/3d-card";
-import { Link } from 'react-router-dom';
 import { useNavigate } from "react-router-dom";
 import pic3 from "@/assets/pic3.jpg";
+
 interface Project {
   project_id: string | null;
   project_code: string | null;
@@ -30,8 +30,6 @@ interface ActiveProjectsResponse {
   endCursor: string | null;
 }
 
-
-
 export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] =
@@ -39,11 +37,10 @@ export default function Projects() {
   const [loading, setLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const navigate = useNavigate();
 
   async function loadProjects() {
-    
-
     setLoading(true);
     setError(null);
 
@@ -75,15 +72,23 @@ export default function Projects() {
     }
   }
 
+  function openProject(project: Project) {
+    navigate("/projects", {
+      state: {
+        projectId: project.project_id,
+        projectCode: project.project_code,
+        projectName: project.project_name,
+      },
+    });
+  }
+
   return (
     <div
-  className="min-h-screen bg-cover bg-center bg-no-repeat"
-  style={{
-    backgroundImage: `url(${pic3})`,
-  }}
->
+      style={{ backgroundImage: `url(${pic3})` }}
+      className="bg-cover bg-center bg-no-repeat min-h-screen w-full flex items-center justify-center p-8"
+    >
       <CardContainer className="inter-var">
-        <CardBody className="relative h-auto w-auto rounded-xl border border-black/[0.1] bg-gray-50 p-6 group/card sm:w-[30rem] dark:border-white/[0.2] dark:bg-black dark:hover:shadow-2xl dark:hover:shadow-emerald-500/[0.1]">
+        <CardBody className="group/card relative h-auto w-auto rounded-xl border border-black/[0.1] bg-gray-50 p-6 sm:w-[30rem] dark:border-white/[0.2] dark:bg-black dark:hover:shadow-2xl dark:hover:shadow-emerald-500/[0.1]">
           <CardItem
             translateZ="50"
             className="text-xl font-bold text-neutral-600 dark:text-white"
@@ -133,12 +138,6 @@ export default function Projects() {
                   No active projects
                 </p>
               )}
-            
-            <Link to="/projects">
-              <button className ="mb-4 rounded-xl bg-black px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black">
-                View components
-              </button>
-            </Link>
 
             <div className="space-y-4">
               {projects.map((project) => {
@@ -175,8 +174,6 @@ export default function Projects() {
                     <p className="text-sm text-gray-500">
                       ISO: {project.iso ?? "N/A"}
                     </p>
-                    
-                    
 
                     <button
                       type="button"
@@ -223,6 +220,14 @@ export default function Projects() {
                             ? `${project.elevation_ft} ft`
                             : "N/A"}
                         </p>
+
+                        <button
+                          type="button"
+                          onClick={() => openProject(project)}
+                          className="mt-4 rounded-xl bg-black px-4 py-2 text-xs font-bold text-white dark:bg-white dark:text-black"
+                        >
+                          View Components
+                        </button>
                       </div>
                     )}
                   </div>
@@ -236,4 +241,4 @@ export default function Projects() {
       <FloatingDockDemo />
     </div>
   );
-}        
+}
