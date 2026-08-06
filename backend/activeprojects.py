@@ -2,15 +2,21 @@ from azure.identity import InteractiveBrowserCredential
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import requests
-
+from azure.storage.filedatalake import DataLakeServiceClient
 
 app = Flask(__name__)
 CORS(app)
 
-
+workspace_name = "WS_DesignServices_Engineering_Data_DEV"
 # Development authentication only.
 credential = InteractiveBrowserCredential()
+onelake_service_client = DataLakeServiceClient(
 
+account_url="https://onelake.dfs.fabric.microsoft.com",
+
+credential=credential,
+
+)
 scope = (
     "https://analysis.windows.net/powerbi/api/"
     "user_impersonation"
@@ -24,6 +30,21 @@ endpoint = (
     "d2ff8165-b5a4-4b9d-b6d2-865de66ec2e9/graphql"
 )
 
+files_query = """
+query {
+  files(first: 5000) {
+    items {
+      project_id
+      Name
+      Extension
+      dateaccessed
+      datemodified
+      datecreated
+      folderPath
+    }
+  }
+}
+"""
 
 projects_query = """
 query {
@@ -58,6 +79,89 @@ query {
 }
 """
 
+
+@app.route("/files", methods=["GET"])
+def get_files():
+    project_id = request.args.get("project_id")
+
+    if not project_id:
+        return jsonify(
+            {"error": "project_id is required"}
+        ), 400
+
+    try:
+        workspace_name = (
+            "WS_DesignServices_Engineering_Data_DEV"
+        )
+
+        lakehouse_name = "LH_DS_ENG_SLV.Lakehouse"
+
+        file_system_client = (
+            onelake_service_client.get_file_system_client(
+                file_system=workspace_name
+            )
+        )
+
+        project_folder = (
+            f"{lakehouse_name}/Files/{project_id}"
+        )
+
+        paths = file_system_client.get_paths(
+            path=project_folder,
+            recursive=True,
+        )
+
+        files = []
+
+        for path in paths:
+            if path.is_directory:
+                continue
+
+            full_path = path.name
+            file_name = full_path.split("/")[-1]
+
+            if "." in file_name:
+                name, extension = file_name.rsplit(".", 1)
+                extension = f".{extension}"
+            else:
+                name = file_name
+                extension = ""
+
+            files.append(
+                {
+                    "project_id": project_id,
+                    "Name": name,
+                    "Extension": extension,
+                    "folderPath": full_path,
+                    "dateaccessed": None,
+                    "datemodified": (
+                        path.last_modified.isoformat()
+                        if path.last_modified
+                        else None
+                    ),
+                    "datecreated": (
+                        path.creation_time.isoformat()
+                        if getattr(path, "creation_time", None)
+                        else None
+                    ),
+                }
+            )
+
+        return jsonify(
+            {
+                "project_id": project_id,
+                "count": len(files),
+                "files": files,
+            }
+        )
+
+    except Exception as error:
+        return jsonify(
+            {
+                "error": "Could not load project files",
+                "details": str(error),
+            }
+        ), 500
 
 def get_headers():
     token_result = credential.get_token(scope)
@@ -247,4 +351,8 @@ def get_components():
 
 if __name__ == "__main__":
     print(app.url_map)
-    app.run(port=5000, debug=True)
+    app.run(
+    port=5000,
+    debug=True,
+    use_reloader=False,
+)

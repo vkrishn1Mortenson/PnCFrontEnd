@@ -73,7 +73,17 @@ export default function Projects() {
   }
 
   function openProject(project: Project) {
-    navigate("/projects", {
+    navigate("/Components", {
+      state: {
+        projectId: project.project_id,
+        projectCode: project.project_code,
+        projectName: project.project_name,
+      },
+    });
+  }
+
+  function openDrawings(project: Project) {
+    navigate("/drawings", {
       state: {
         projectId: project.project_id,
         projectCode: project.project_code,
@@ -227,6 +237,14 @@ export default function Projects() {
                           className="mt-4 rounded-xl bg-black px-4 py-2 text-xs font-bold text-white dark:bg-white dark:text-black"
                         >
                           View Components
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => openDrawings(project)}
+                          className="ml-2 mt-4 rounded-xl bg-black px-4 py-2 text-xs font-bold text-white dark:bg-white dark:text-black"
+                        >
+                          View Drawings
                         </button>
                       </div>
                     )}

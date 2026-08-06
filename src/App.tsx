@@ -6,9 +6,9 @@ import LoadingScreen from "@/pages/LoadingScreen";
 
 // Lazy-loaded pages
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
-const Projects = lazy(() => import("@/pages/Projects"));
+const Projects = lazy(() => import("@/pages/Components"));
 const Settings = lazy(() => import("@/pages/Settings"));
-const Symbols = lazy(() => import("@/pages/Symbols"));
+const Symbols = lazy(() => import("@/pages/Drawings"));
 
 export default function App() {
   return (
@@ -16,9 +16,9 @@ export default function App() {
       <Suspense fallback={<LoadingScreen />}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/Projects" element={<Projects />} />
+          <Route path="/Components" element={<Projects />} />
           <Route path="/Settings" element={<Settings />} />
-          <Route path="/Symbols" element={<Symbols />} />
+          <Route path="/Drawings" element={<Symbols />} />
         </Routes>
       </Suspense>
     </Layout>

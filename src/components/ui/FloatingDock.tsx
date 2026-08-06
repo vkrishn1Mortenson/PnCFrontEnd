@@ -20,18 +20,18 @@ export function FloatingDockDemo() {
     href: "/",
   },
   {
-    title: "Projects",
+    title: "Components",
     icon: (
       <IconTerminal2 className="h-full w-full text-neutral-500 dark:text-neutral-300" />
     ),
-    href: "/Projects",
+    href: "/Components",
   },
   {
-    title: "Symbols",
+    title: "Drawings",
     icon: (
       <IconSchema className="h-full w-full text-neutral-500 dark:text-neutral-300" />
     ),
-    href: "/Symbols",
+    href: "/Drawings",
   },
 ];
   return (
