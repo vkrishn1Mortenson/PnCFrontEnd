@@ -20,7 +20,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { FloatingDockDemo } from "@/components/ui/FloatingDock";
-
+import LoadingScreen from "@/pages/LoadingScreen";
 interface SelectedProject {
   projectId: string | null;
   projectCode: string | null;
@@ -49,8 +49,13 @@ interface ComponentRecord {
 export default function Projects() {
   const location = useLocation();
 
+  const storedProject = localStorage.getItem("activeProject");
+
   const selectedProject =
-    location.state as SelectedProject | null;
+    (location.state as SelectedProject | null) ??
+    (storedProject
+    ? (JSON.parse(storedProject) as SelectedProject)
+    : null);
 
   const [components, setComponents] = useState<ComponentRecord[]>(
     []
@@ -136,7 +141,7 @@ export default function Projects() {
   if (loading) {
     return (
       <div>
-        Loading component relationships...
+        <LoadingScreen></LoadingScreen>
       </div>
     );
   }
@@ -163,17 +168,24 @@ export default function Projects() {
     <div>
       <FloatingDockDemo />
 
-      <h2>Component Relationships</h2>
+      <header className="w-full border-b px-6 py-5">
+  <div className="flex flex-col gap-2">
+    <h1 className="text-lg font-semibold">
+      Component Relationships
+    </h1>
 
-      <p>
-        Project:{" "}
-        {selectedProject.projectName ??
-          selectedProject.projectCode ??
-          selectedProject.projectId}
-      </p>
+    <p className="text-sm text-muted-foreground">
+      Project:{" "}
+      {selectedProject.projectName ??
+        selectedProject.projectCode ??
+        selectedProject.projectId}
+    </p>
 
-      <p>Total Components: {components.length}</p>
-
+    <p className="text-sm text-muted-foreground">
+      Total Components: {components.length}
+    </p>
+  </div>
+</header>
       {components.map((component) => (
         <Card key={component.component_id}>
           <CardHeader>

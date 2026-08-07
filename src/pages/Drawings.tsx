@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react";
-import {
-  Navigate,
-  useLocation,
-} from "react-router-dom";
-import {
-  FileText,
-  Folder,
-} from "lucide-react";
+import { Navigate, useLocation } from "react-router-dom";
+import { FileText, Folder } from "lucide-react";
+
 import { AppSidebar } from "@/components/ui/app-sidebar";
 import {
   SidebarInset,
@@ -33,15 +28,19 @@ interface FilesRecord {
 export default function Symbol() {
   const location = useLocation();
 
-  const selectedProject =
-    location.state as SelectedProject | null;
+  const storedProject = localStorage.getItem("activeProject");
+
+  const selectedProject: SelectedProject | null =
+    (location.state as SelectedProject | null) ??
+    (storedProject
+      ? (JSON.parse(storedProject) as SelectedProject)
+      : null);
 
   const [files, setFiles] = useState<FilesRecord[]>([]);
   const [selectedFile, setSelectedFile] =
     useState<FilesRecord | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] =
-    useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedProject?.projectId) {
@@ -53,40 +52,36 @@ export default function Symbol() {
       selectedProject.projectId
     );
 
-    setLoading(true);
-    setError(null);
+    const fetchFiles = async () => {
+      try {
+        setLoading(true);
+        setError(null);
 
-    fetch(
-      `http://localhost:5000/files?project_id=${projectId}`
-    )
-      .then(async (res) => {
-        if (!res.ok) {
-          const responseText = await res.text();
+        const response = await fetch(
+          `http://localhost:5000/files?project_id=${projectId}`
+        );
+
+        if (!response.ok) {
+          const responseText = await response.text();
 
           throw new Error(
-            `Request failed: ${res.status} ${responseText}`
+            `Request failed: ${response.status} ${responseText}`
           );
         }
 
-        return res.json();
-      })
-      .then((data) => {
-        console.log("FILE DATA:", data.files);
-        console.log(
-          "FILE COUNT:",
-          data.files?.length
-        );
+        const data = await response.json();
 
-        const rawFiles: FilesRecord[] =
-          data.files || [];
+        const loadedFiles: FilesRecord[] =
+          data.files ?? [];
 
-        setFiles(rawFiles);
+        setFiles(loadedFiles);
 
-        if (rawFiles.length > 0) {
-          setSelectedFile(rawFiles[0]);
+        if (loadedFiles.length > 0) {
+          setSelectedFile(loadedFiles[0]);
+        } else {
+          setSelectedFile(null);
         }
-      })
-      .catch((err: unknown) => {
+      } catch (err) {
         console.error(
           "Failed to load project files:",
           err
@@ -100,10 +95,12 @@ export default function Symbol() {
 
         setFiles([]);
         setSelectedFile(null);
-      })
-      .finally(() => {
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    fetchFiles();
   }, [selectedProject?.projectId]);
 
   if (!selectedProject?.projectId) {
@@ -111,7 +108,6 @@ export default function Symbol() {
   }
 
   return (
-    
     <SidebarProvider>
       <AppSidebar
         files={files}
@@ -120,16 +116,23 @@ export default function Symbol() {
       />
 
       <SidebarInset>
-        <header className="flex h-16 items-center border-b px-6">
-          <div>
-            <h1 className="text-lg font-semibold">
-              Project Drawings
+        {/* HEADER */}
+        <header className="w-full border-b px-6 py-5">
+          {/* This fixes the squished-together text */}
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-bold">
+              Component Relationships
             </h1>
 
             <p className="text-sm text-muted-foreground">
+              Project:{" "}
               {selectedProject.projectName ??
                 selectedProject.projectCode ??
                 selectedProject.projectId}
+            </p>
+
+            <p className="text-sm text-muted-foreground">
+              Total Components: {files.length}
             </p>
           </div>
         </header>
@@ -147,98 +150,96 @@ export default function Symbol() {
             </div>
           )}
 
-          {!loading &&
-            !error &&
-            files.length === 0 && (
-              <div className="flex flex-1 items-center justify-center">
-                <div className="text-center">
-                  <Folder className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+          {!loading && !error && files.length === 0 && (
+            <div className="flex flex-1 items-center justify-center">
+              <div className="text-center">
+                <Folder className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
 
-                  <h2 className="font-semibold">
-                    No project files found
+                <h2 className="font-semibold">
+                  No project files found
+                </h2>
+
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This project does not currently have
+                  any files.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!loading && !error && selectedFile && (
+            <div className="rounded-xl border bg-card p-6 shadow-sm">
+              <div className="flex items-start gap-4">
+                <FileText className="mt-1 h-8 w-8 text-muted-foreground" />
+
+                <div>
+                  <h2 className="text-xl font-semibold">
+                    {selectedFile.Name}
+                    {selectedFile.Extension}
                   </h2>
 
                   <p className="mt-1 text-sm text-muted-foreground">
-                    This project does not currently have
-                    any files.
+                    Selected project file
                   </p>
                 </div>
               </div>
-            )}
 
-          {!loading &&
-            !error &&
-            selectedFile && (
-              <div className="rounded-xl border bg-card p-6">
-                <div className="flex items-start gap-4">
-                  <FileText className="mt-1 h-8 w-8 text-muted-foreground" />
-                    
-                  <div>
-                    <h2 className="text-xl font-semibold">
-                      {selectedFile.Name}
-                      {selectedFile.Extension}
-                    </h2>
+              <div className="mt-6">
+                <FloatingDockDemo />
+              </div>
 
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Selected project file
-                    </p>
-                  </div>
-                </div>
+              <div className="mt-6 grid gap-3 text-sm">
                 <div>
-                <FloatingDockDemo></FloatingDockDemo>
+                  <span className="font-semibold">
+                    Project ID:
+                  </span>{" "}
+                  {selectedFile.project_id ?? "N/A"}
                 </div>
-                <div className="mt-6 space-y-3 text-sm">
-                  <div>
-                    <span className="font-semibold">
-                      Project ID:
-                    </span>{" "}
-                    {selectedFile.project_id ?? "N/A"}
-                  </div>
 
-                  <div>
-                    <span className="font-semibold">
-                      File name:
-                    </span>{" "}
-                    {selectedFile.Name || "N/A"}
-                  </div>
+                <div>
+                  <span className="font-semibold">
+                    File name:
+                  </span>{" "}
+                  {selectedFile.Name || "N/A"}
+                </div>
 
-                  <div>
-                    <span className="font-semibold">
-                      Extension:
-                    </span>{" "}
-                    {selectedFile.Extension || "N/A"}
-                  </div>
+                <div>
+                  <span className="font-semibold">
+                    Extension:
+                  </span>{" "}
+                  {selectedFile.Extension || "N/A"}
+                </div>
 
-                  <div>
-                    <span className="font-semibold">
-                      Folder path:
-                    </span>{" "}
-                    {selectedFile.folderPath || "N/A"}
-                  </div>
+                <div>
+                  <span className="font-semibold">
+                    Folder path:
+                  </span>{" "}
+                  {selectedFile.folderPath || "N/A"}
+                </div>
 
-                  <div>
-                    <span className="font-semibold">
-                      Date created:
-                    </span>{" "}
-                    {selectedFile.datecreated ?? "N/A"}
-                  </div>
+                <div>
+                  <span className="font-semibold">
+                    Date created:
+                  </span>{" "}
+                  {selectedFile.datecreated ?? "N/A"}
+                </div>
 
-                  <div>
-                    <span className="font-semibold">
-                      Date modified:
-                    </span>{" "}
-                    {selectedFile.datemodified ?? "N/A"}
-                  </div>
+                <div>
+                  <span className="font-semibold">
+                    Date modified:
+                  </span>{" "}
+                  {selectedFile.datemodified ?? "N/A"}
+                </div>
 
-                  <div>
-                    <span className="font-semibold">
-                      Date accessed:
-                    </span>{" "}
-                    {selectedFile.dateaccessed ?? "N/A"}
-                  </div>
+                <div>
+                  <span className="font-semibold">
+                    Date accessed:
+                  </span>{" "}
+                  {selectedFile.dateaccessed ?? "N/A"}
                 </div>
               </div>
-            )}
+            </div>
+          )}
         </main>
       </SidebarInset>
     </SidebarProvider>

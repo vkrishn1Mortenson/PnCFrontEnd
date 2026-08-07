@@ -9,8 +9,29 @@ import {
   IconSchema,
   IconTerminal2,
 } from "@tabler/icons-react";
+import { useNavigate } from "react-router-dom";
 
 export function FloatingDockDemo() {
+
+
+  const navigate = useNavigate();
+
+  function navigateWithActiveProject(path: string) {
+    const storedProject = localStorage.getItem("activeProject");
+
+    if (!storedProject) {
+      navigate("/");
+      return;
+    }
+
+    const activeProject = JSON.parse(storedProject);
+
+    navigate(path, {
+      state: activeProject,
+    });
+  }
+
+
   const links = [
   {
     title: "Home",
@@ -34,12 +55,12 @@ export function FloatingDockDemo() {
     href: "/Drawings",
   },
 ];
-  return (
-    <div className="fixed inset-x-0 bottom-6 flex justify-center z-50 -mr-60">
-      <FloatingDock
-        mobileClassName="translate-y-20" // only for demo, remove for production
-        items={links}
-      />
-    </div>
-  );
-}
+
+return (
+  <div className="fixed inset-x-0 bottom-6 z-50 -mr-60 flex justify-center">
+    <FloatingDock
+      mobileClassName="translate-y-20"
+      items={links}
+    />
+  </div>
+)};

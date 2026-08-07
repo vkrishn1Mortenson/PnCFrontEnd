@@ -73,24 +73,52 @@ export default function Projects() {
   }
 
   function openProject(project: Project) {
-    navigate("/Components", {
-      state: {
-        projectId: project.project_id,
-        projectCode: project.project_code,
-        projectName: project.project_name,
-      },
-    });
-  }
+  const activeProject = {
+    projectId: project.project_id,
+    projectCode: project.project_code,
+    projectName: project.project_name,
+  };
 
-  function openDrawings(project: Project) {
-    navigate("/drawings", {
-      state: {
-        projectId: project.project_id,
-        projectCode: project.project_code,
-        projectName: project.project_name,
-      },
-    });
-  }
+  localStorage.setItem(
+    "activeProject",
+    JSON.stringify(activeProject)
+  );
+
+  navigate("/Components", {
+    state: activeProject,
+  });
+}
+
+function openDrawings(project: Project) {
+  const activeProject = {
+    projectId: project.project_id,
+    projectCode: project.project_code,
+    projectName: project.project_name,
+  };
+
+  localStorage.setItem(
+    "activeProject",
+    JSON.stringify(activeProject)
+  );
+
+  navigate("/Drawings", {
+    state: activeProject,
+  });
+}
+  function saveActiveProject(project: Project) {
+  const activeProject = {
+    projectId: project.project_id,
+    projectCode: project.project_code,
+    projectName: project.project_name,
+  };
+
+  localStorage.setItem(
+    "activeProject",
+    JSON.stringify(activeProject)
+  );
+
+  return activeProject;
+}
 
   return (
     <div
