@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { FileText, Folder } from "lucide-react";
+import { FileText, FileJson, Folder } from "lucide-react";
 import { FloatingDockDemo } from "@/components/ui/FloatingDock";
 
-const API_BASE = "http://localhost:5000";
+import PdfWithOverlay from "@/pages/21";;
+
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:5000";
 
 interface SelectedProject {
   projectId: string | null;
@@ -81,27 +83,43 @@ export default function Symbol() {
     fetchFiles();
   }, [selectedProject?.projectId]);
 
-  // Only PDFs
-  const pdfFiles = useMemo(
+  // Files shown in the list: PDFs + JSON
+  const visibleFiles = useMemo(
     () =>
-      files.filter((f) => (f.Extension || "").toLowerCase() === ".pdf"),
+      files.filter((f) =>
+        [".pdf", ".json"].includes((f.Extension || "").toLowerCase())
+      ),
     [files]
   );
 
-  // Auto-select first PDF whenever the list changes
+  // find the CV JSON for the selected PDF (adjust matching rule as needed)
+  const overlayJson = useMemo(() => {
+    if (!selectedFile) return null;
+    return (
+      files.find(
+        (f) =>
+          (f.Extension || "").toLowerCase() === ".json" &&
+          f.folderPath.includes("/CV_Output/")
+      ) ?? null
+    );
+  }, [files, selectedFile]);
+
+  // Auto-select first file whenever the list changes
   useEffect(() => {
-    if (pdfFiles.length > 0) {
-      setSelectedFile(pdfFiles[0]);
+    if (visibleFiles.length > 0) {
+      setSelectedFile(visibleFiles[0]);
     } else {
       setSelectedFile(null);
     }
-  }, [pdfFiles]);
+  }, [visibleFiles]);
 
   if (!selectedProject?.projectId) {
     return <Navigate to="/" replace />;
   }
 
-  const pdfUrl = selectedFile ? buildContentUrl(selectedFile.folderPath) : null;
+  const selectedExt = (selectedFile?.Extension || "").toLowerCase();
+  const isPdf = selectedExt === ".pdf";
+  const fileUrl = selectedFile ? buildContentUrl(selectedFile.folderPath) : null;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -116,13 +134,13 @@ export default function Symbol() {
               selectedProject.projectId}
           </p>
           <p className="text-sm text-muted-foreground">
-            PDFs: {pdfFiles.length}
+            Files: {visibleFiles.length}
           </p>
         </div>
       </header>
 
       <main className="flex flex-1 gap-4 p-6">
-        {/* LEFT: PDF list */}
+        {/* LEFT: file list */}
         <aside className="w-72 shrink-0 space-y-2 overflow-y-auto">
           {loading && (
             <p className="text-sm text-muted-foreground">
@@ -136,17 +154,19 @@ export default function Symbol() {
             </div>
           )}
 
-          {!loading && !error && pdfFiles.length === 0 && (
+          {!loading && !error && visibleFiles.length === 0 && (
             <div className="flex flex-col items-center gap-2 rounded-lg border p-4 text-center">
               <Folder className="h-8 w-8 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">
-                No PDF drawings found for this project.
+                No files found for this project.
               </p>
             </div>
           )}
 
-          {pdfFiles.map((file) => {
+          {visibleFiles.map((file) => {
             const isActive = selectedFile?.folderPath === file.folderPath;
+            const ext = (file.Extension || "").toLowerCase();
+            const Icon = ext === ".json" ? FileJson : FileText;
             return (
               <button
                 key={file.folderPath}
@@ -155,7 +175,7 @@ export default function Symbol() {
                   isActive ? "border-primary bg-accent" : "hover:bg-accent/50"
                 }`}
               >
-                <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="break-all">
                   {file.Name}
                   {file.Extension}
@@ -165,9 +185,9 @@ export default function Symbol() {
           })}
         </aside>
 
-        {/* RIGHT: PDF viewer */}
+        {/* RIGHT: viewer */}
         <section className="flex flex-1 flex-col rounded-xl border bg-card shadow-sm">
-          {selectedFile && pdfUrl ? (
+          {selectedFile && fileUrl ? (
             <>
               <div className="flex items-center justify-between border-b px-4 py-3">
                 <div className="flex items-center gap-2">
@@ -178,7 +198,7 @@ export default function Symbol() {
                   </span>
                 </div>
                 <a
-                  href={pdfUrl}
+                  href={fileUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-primary underline"
@@ -186,16 +206,33 @@ export default function Symbol() {
                   Open in new tab
                 </a>
               </div>
-              <iframe
-                src={pdfUrl}
-                title={selectedFile.Name}
-                className="h-full min-h-[70vh] w-full rounded-b-xl"
-              />
+
+              {isPdf ? (
+                <PdfWithOverlay
+                  pdfPath={selectedFile.folderPath}
+                  jsonPath={overlayJson?.folderPath ?? null}
+                />
+              ) : (
+                <div className="p-6 text-sm text-muted-foreground">
+                  {selectedFile.Name}
+                  {selectedFile.Extension} — no inline preview for this file
+                  type. Use{" "}
+                  <a
+                    href={fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline"
+                  >
+                    Open in new tab
+                  </a>{" "}
+                  to view the raw file.
+                </div>
+              )}
             </>
           ) : (
             !loading && (
               <div className="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground">
-                Select a PDF to view it here.
+                Select a file to view it here.
               </div>
             )
           )}
