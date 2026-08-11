@@ -3,6 +3,9 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import requests
 from azure.storage.filedatalake import DataLakeServiceClient
+from flask import send_file
+from io import BytesIO
+from urllib.parse import quote, unquote
 
 app = Flask(__name__)
 CORS(app)
@@ -69,19 +72,61 @@ query {
       component_id
       project_id
       parent_component_id
+      source_component_template_id
       component_tag
       display_name
       component_type
       component_subtype
       component_class
+      status
     }
   }
 }
 """
 
 
+
+from flask import send_file
+from io import BytesIO
+import mimetypes
+
+@app.route("/files/content", methods=["GET"])
+def get_file_content():
+    file_path = request.args.get("path")
+    if not file_path:
+        return jsonify({"error": "path is required"}), 400
+
+    try:
+        file_system_client = onelake_service_client.get_file_system_client(
+            file_system=workspace_name
+        )
+        file_client = file_system_client.get_file_client(file_path)
+        file_bytes = file_client.download_file().readall()
+
+        filename = file_path.split("/")[-1]
+        mime_type, _ = mimetypes.guess_type(filename)
+        if mime_type is None:
+            mime_type = "application/octet-stream"
+
+        return send_file(
+            BytesIO(file_bytes),
+            download_name=filename,
+            mimetype=mime_type,
+            as_attachment=False,  # inline -> browser renders PDF
+        )
+    except Exception as error:
+        return jsonify(
+            {"error": "Could not load file", "details": str(error)}
+        ), 500
+
+
+
+
+
+
 @app.route("/files", methods=["GET"])
 def get_files():
+    
     project_id = request.args.get("project_id")
 
     if not project_id:
@@ -90,11 +135,49 @@ def get_files():
         ), 400
 
     try:
-        workspace_name = (
-            "WS_DesignServices_Engineering_Data_DEV"
+        # Get projects from GraphQL
+        response = requests.post(
+            endpoint,
+            headers=get_headers(),
+            json={"query": projects_query},
+            timeout=60,
         )
 
-        lakehouse_name = "LH_DS_ENG_SLV.Lakehouse"
+        response_data = response.json()
+
+        if not response.ok:
+            return jsonify(
+                {
+                    "error": "GraphQL request failed",
+                    "details": response_data,
+                }
+            ), response.status_code
+
+        projects = (
+            response_data
+            .get("data", {})
+            .get("projects", {})
+            .get("items", [])
+        )
+
+        project = next(
+            (
+                p
+                for p in projects
+                if str(p.get("project_id")) == str(project_id)
+            ),
+            None,
+        )
+
+        if not project:
+            return jsonify(
+                {
+                    "error": "Project not found",
+                    "project_id": project_id,
+                }
+            ), 404
+
+        project_name = project.get("project_name")
 
         file_system_client = (
             onelake_service_client.get_file_system_client(
@@ -103,7 +186,7 @@ def get_files():
         )
 
         project_folder = (
-            f"{lakehouse_name}/Files/{project_id}"
+            f"LH_DS_ENG_BRZ.Lakehouse/Files/{project_name}"
         )
 
         paths = file_system_client.get_paths(
@@ -119,7 +202,13 @@ def get_files():
 
             full_path = path.name
             file_name = full_path.split("/")[-1]
+            file_client = file_system_client.get_file_client(full_path)
 
+            try:
+                props = file_client.get_file_properties()
+                print("SUCCESS:", full_path)
+            except Exception as e:
+                print("FAILED:", full_path, e)
             if "." in file_name:
                 name, extension = file_name.rsplit(".", 1)
                 extension = f".{extension}"
@@ -130,10 +219,12 @@ def get_files():
             files.append(
                 {
                     "project_id": project_id,
+                    "project_name": project_name,
                     "Name": name,
                     "Extension": extension,
                     "folderPath": full_path,
                     "dateaccessed": None,
+                    "contentUrl": f"/files/content?path={quote(full_path)}",
                     "datemodified": (
                         path.last_modified.isoformat()
                         if path.last_modified
@@ -150,6 +241,7 @@ def get_files():
         return jsonify(
             {
                 "project_id": project_id,
+                "project_name": project_name,
                 "count": len(files),
                 "files": files,
             }
@@ -289,7 +381,7 @@ def get_components():
                 "parent_component_id"
             )
 
-            if parent_component_id is not None:
+            if parent_component_id:
                 parent = components_by_id.get(
                     str(parent_component_id)
                 )
