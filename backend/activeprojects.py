@@ -79,6 +79,7 @@ query {
       component_subtype
       component_class
       status
+      filepath
     }
   }
 }
@@ -89,6 +90,9 @@ query {
 from flask import send_file
 from io import BytesIO
 import mimetypes
+
+
+
 
 @app.route("/files/content", methods=["GET"])
 def get_file_content():
@@ -120,7 +124,65 @@ def get_file_content():
         ), 500
 
 
+symbol_library_folder = "LH_DS_ENG_BRZ.Lakehouse/Files/Symbol Library"
 
+
+@app.route("/symbols", methods=["GET"])
+def get_symbols():
+    try:
+        file_system_client = (
+            onelake_service_client.get_file_system_client(
+                file_system=workspace_name
+            )
+        )
+
+        paths = list(
+            file_system_client.get_paths(
+                path=symbol_library_folder,
+                recursive=False,
+            )
+        )
+        
+
+        symbols = []
+
+        for path in paths:
+            if path.is_directory:
+                continue
+
+            full_path = path.name
+            file_name = full_path.split("/")[-1]
+
+            # Only expose PNGs.
+            if not file_name.lower().endswith(".png"):
+                continue
+
+            name_without_ext = file_name.rsplit(".", 1)[0]
+
+            symbols.append(
+                {
+                    "Name": name_without_ext,          # e.g. "Capacitor"
+                    "fileName": file_name,             # e.g. "Capacitor.png"
+                    "folderPath": full_path,           # full lakehouse path
+                    # Reuse the existing /files/content endpoint to stream bytes.
+                    "contentUrl": f"/files/content?path={quote(full_path)}",
+                }
+            )
+        
+        return jsonify(
+            {
+                "count": len(symbols),
+                "symbols": symbols,
+            }
+        )
+
+    except Exception as error:
+        return jsonify(
+            {
+                "error": "Could not load symbol library",
+                "details": str(error),
+            }
+        ), 500
 
 
 
