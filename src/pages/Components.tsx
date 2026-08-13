@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {MagneticButtonDemo} from "@/components/ui/MagneticButtonDemo"
 import {
   Navigate,
   useLocation,
@@ -12,16 +13,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+
 import {
   Card,
-  CardContent,
+  CardAction,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { FloatingDockDemo } from "@/components/ui/FloatingDock";
 import LoadingScreen from "@/pages/LoadingScreen";
-
+import { Trash2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 interface SelectedProject {
   projectId: string | null;
   projectCode: string | null;
@@ -242,95 +247,135 @@ useEffect(() => {
   return null;
 };
   //console.log(`symbolMap: ${JSON.stringify(symbolMap)}`);
-  return (
-    <div>
-      <FloatingDockDemo />
-      <header className="w-full border-b px-6 py-5">
-  <div className="flex flex-col gap-2">
-    <h1 className="text-lg font-semibold">
-      Component Relationships
-    </h1>
-    <p className="text-sm text-muted-foreground">
-      Project:{" "}
-      {selectedProject.projectName ??
-        selectedProject.projectCode ??
-        selectedProject.projectId}
-    </p>
-    <p className="text-sm text-muted-foreground">
-      Total Components: {components.length}
-    </p>
+return (
+  <div>
+    <FloatingDockDemo />
+    <header className="w-full border-b px-6 py-5">
+  <div className="flex items-start justify-between">
+    
+    <div className="flex flex-col gap-2">
+      <h1 className="text-lg font-semibold">
+        Component Relationships
+      </h1>
+
+      <p className="text-sm text-muted-foreground">
+        Project:{" "}
+        {selectedProject.projectName ??
+          selectedProject.projectCode ??
+          selectedProject.projectId}
+      </p>
+
+      <p className="text-sm text-muted-foreground">
+        Total Components: {components.length}
+      </p>
+    </div>
+
+    <MagneticButtonDemo />
+
   </div>
 </header>
+
+    <div className="grid grid-cols-1 gap-5 p-6 md:grid-cols-2 xl:grid-cols-3">
       {components.map((component) => {
-        const symbolUrl = resolveSymbolUrl(
-          component.filepath
-        );
-      //   console.log("COMPONENT FILEPATH CHECK", {
-      //   displayName: component.display_name,
-      //   filepath: component.filepath,
-      //   resolvedUrl: symbolUrl,
-      // });
+        const symbolUrl = resolveSymbolUrl(component.filepath);
+
         return (
-          <Card key={component.component_id}>
-            <CardHeader>
-              <CardTitle>
-                {component.display_name ||
-                  "Unnamed Component"}
-              </CardTitle>
-              <CardDescription>
-                {component.component_type ||
-                  "Unknown Type"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {symbolUrl ? (
-                <img
-                  src={symbolUrl}
-                  alt={
-                    component.display_name ||
-                    "Component symbol"
-                  }
-                  className="h-24 w-24 object-contain border rounded-md bg-white p-1"
-                />
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No symbol image.
+          <Card
+            key={component.component_id}
+            className="overflow-hidden border bg-card shadow-sm transition hover:shadow-md"
+          >
+            <CardHeader className="gap-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 space-y-1">
+                  <CardTitle className="truncate text-base">
+                    {component.display_name || "Unnamed Component"}
+                  </CardTitle>
+
+                  <CardDescription className="truncate">
+                    {component.component_type || "Unknown Type"}
+                  </CardDescription>
+                </div>
+
+                <CardAction>
+                  <Badge variant="secondary">
+                    {component.component_class || "N/A"}
+                  </Badge>
+                </CardAction>
+              </div>
+
+              <div className="flex gap-4">
+  <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-lg border bg-white p-2">
+    {symbolUrl ? (
+      <img
+        src={symbolUrl}
+        alt={component.display_name || "Unnamed Component"}
+        className="h-full w-full object-contain"
+      />
+    ) : (
+      <span className="text-center text-xs text-muted-foreground">
+        No symbol
+      </span>
+    )}
+  </div>
+
+  <div className="min-w-0 flex-1 space-y-2 text-sm">
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-muted-foreground">Tag</span>
+      <span className="truncate font-medium">
+        {component.component_tag || "N/A"}
+      </span>
+    </div>
+
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-muted-foreground">Subtype</span>
+      <span className="truncate font-medium">
+        {component.component_subtype || "N/A"}
+      </span>
+    </div>
+
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-muted-foreground">Children</span>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-7 px-2"
+        disabled
+      >
+        {component.children.length}
+      </Button>
+    </div>
+  </div>
+</div>
+
+              <div className="space-y-1 rounded-md bg-muted/40 p-3 text-xs">
+                <p className="text-muted-foreground">
+                  Component ID
                 </p>
-              )}
-              <p>
-                Tag: {component.component_tag || "N/A"}
-              </p>
-              <p>
-                Class:{" "}
-                {component.component_class || "N/A"}
-              </p>
-              <p>
-                Subtype:{" "}
-                {component.component_subtype || "N/A"}
-              </p>
-              <p>
-                Component ID: {component.component_id}
-              </p>
-              <p>
-                Children: {component.children.length}
-              </p>
+                <p className="break-all font-mono">
+                  {component.component_id}
+                </p>
+              </div>
+            </CardHeader>
+
+            <CardFooter className="flex flex-col items-stretch gap-4 border-t pt-4">
               <Select
-                value={
-                  selectedView[
-                    component.component_id
-                  ] ?? ""
-                }
+                value={selectedView[component.component_id] ?? ""}
                 onValueChange={(value) =>
                   setSelectedView((previous) => ({
                     ...previous,
-                    [component.component_id]:
-                      value ?? "",
+                    [component.component_id]: value ?? "",
                   }))
                 }
               >
+                <Button variant="destructive">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Edit
+              </Button>
                 <SelectTrigger>
                   <SelectValue placeholder="Select relationship" />
                 </SelectTrigger>
+
                 <SelectContent>
                   <SelectItem value="parent">
                     Parent Component
@@ -340,74 +385,102 @@ useEffect(() => {
                   </SelectItem>
                 </SelectContent>
               </Select>
-              {selectedView[
-                component.component_id
-              ] === "parent" && (
-                <div>
-                  <h4>Parent Component</h4>
+
+              {selectedView[component.component_id] === "parent" && (
+                <div className="rounded-lg border bg-background p-3 text-sm">
+                  <h4 className="mb-2 font-medium">
+                    Parent Component
+                  </h4>
+
                   {component.parent_component ? (
-                    <div>
+                    <div className="space-y-1">
                       <p>
-                        Name:{" "}
-                        {
-                          component.parent_component
-                            .display_name
-                        }
+                        <span className="text-muted-foreground">
+                          Name:{" "}
+                        </span>
+                        {component.parent_component.display_name}
                       </p>
+
                       <p>
-                        Tag:{" "}
-                        {
-                          component.parent_component
-                            .component_tag
-                        }
+                        <span className="text-muted-foreground">
+                          Tag:{" "}
+                        </span>
+                        {component.parent_component.component_tag}
                       </p>
+
                       <p>
-                        Type:{" "}
-                        {
-                          component.parent_component
-                            .component_type
-                        }
+                        <span className="text-muted-foreground">
+                          Type:{" "}
+                        </span>
+                        {component.parent_component.component_type}
                       </p>
-                      <p>
-                        ID:{" "}
-                        {
-                          component.parent_component
-                            .component_id
-                        }
+
+                      <p className="break-all">
+                        <span className="text-muted-foreground">
+                          ID:{" "}
+                        </span>
+                        {component.parent_component.component_id}
                       </p>
                     </div>
                   ) : (
-                    <p>No parent component.</p>
+                    <p className="text-muted-foreground">
+                      No parent component.
+                    </p>
                   )}
                 </div>
               )}
-              {selectedView[
-                component.component_id
-              ] === "children" && (
-                <div>
-                  <h4>Child Components</h4>
+
+              {selectedView[component.component_id] === "children" && (
+                <div className="rounded-lg border bg-background p-3 text-sm">
+                  <h4 className="mb-2 font-medium">
+                    Child Components
+                  </h4>
+
                   {component.children.length > 0 ? (
-                    component.children.map((child) => (
-                      <div key={child.component_id}>
-                        <p>{child.display_name}</p>
-                        <p>
-                          Tag: {child.component_tag}
-                        </p>
-                        <p>
-                          Type: {child.component_type}
-                        </p>
-                        <p>ID: {child.component_id}</p>
-                      </div>
-                    ))
+                    <div className="space-y-3">
+                      {component.children.map((child) => (
+                        <div
+                          key={child.component_id}
+                          className="rounded-md border bg-muted/30 p-3"
+                        >
+                          <p className="font-medium">
+                            {child.display_name || "Unnamed Child"}
+                          </p>
+
+                          <p>
+                            <span className="text-muted-foreground">
+                              Tag:{" "}
+                            </span>
+                            {child.component_tag || "N/A"}
+                          </p>
+
+                          <p>
+                            <span className="text-muted-foreground">
+                              Type:{" "}
+                            </span>
+                            {child.component_type || "N/A"}
+                          </p>
+
+                          <p className="break-all">
+                            <span className="text-muted-foreground">
+                              ID:{" "}
+                            </span>
+                            {child.component_id}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
-                    <p>No child components found.</p>
+                    <p className="text-muted-foreground">
+                      No child components found.
+                    </p>
                   )}
                 </div>
               )}
-            </CardContent>
+            </CardFooter>
           </Card>
         );
       })}
     </div>
-  );
-}
+  </div>
+)};

@@ -8,6 +8,7 @@ import {
   IconNewSection,
   IconSchema,
   IconTerminal2,
+  IconPlus 
 } from "@tabler/icons-react";
 import { useNavigate } from "react-router-dom";
 
@@ -53,6 +54,13 @@ export function FloatingDockDemo() {
       <IconSchema className="h-full w-full text-neutral-500 dark:text-neutral-300" />
     ),
     href: "/Drawings",
+  },
+  {
+    title: "Symbol Creator",
+    icon: (
+      <IconPlus className="h-full w-full text-neutral-500 dark:text-neutral-300" />
+    ),
+    href: "/SymbolCreation",
   },
 ];
 
