@@ -25,11 +25,13 @@ type SymbolOperation =
       operation: "text";
       text: string;
       position: Point;
+      fontSize: number;
     };
 
 type Tool = "marker" | "eraser" | "line" | "rectangle" | "ellipse" | "text";
 
 const CANVAS_SIZE = 512;
+const DEFAULT_FONT_SIZE = 28;
 const CURVE_KAPPA = 0.5522847498;
 
 const slugify = (value: string) =>
@@ -251,9 +253,9 @@ const operationsToSvgElements = (operations: SymbolOperation[]) =>
         return `<path d="M ${operation.origin.x} ${operation.origin.y} C ${operation.controlOrigin.x} ${operation.controlOrigin.y}, ${operation.controlDestination.x} ${operation.controlDestination.y}, ${operation.destination.x} ${operation.destination.y}" fill="none" stroke="black" stroke-width="3" stroke-linecap="round" />`;
       }
 
-      return `<text x="${operation.position.x}" y="${operation.position.y}" fill="black" font-size="28" font-family="Arial, sans-serif">${escapeXml(
-        operation.text
-      )}</text>`;
+      return `<text x="${operation.position.x}" y="${operation.position.y}" fill="black" font-size="${
+        operation.fontSize ?? DEFAULT_FONT_SIZE
+      }" font-family="Arial, sans-serif">${escapeXml(operation.text)}</text>`;
     })
     .join("");
 
@@ -298,7 +300,7 @@ const SymbolPreview = ({ operations }: { operations: SymbolOperation[] }) => {
             x={operation.position.x}
             y={operation.position.y}
             fill="black"
-            fontSize="28"
+            fontSize={operation.fontSize ?? DEFAULT_FONT_SIZE}
             fontFamily="Arial, sans-serif"
           >
             {operation.text}
@@ -317,9 +319,18 @@ const SymbolCreation = () => {
   const [symbolText, setSymbolText] = React.useState("");
   const [tool, setTool] = React.useState<Tool>("marker");
   const [strokeWidth, setStrokeWidth] = React.useState(3);
+  const [fontSize, setFontSize] = React.useState(DEFAULT_FONT_SIZE);
   const [operations, setOperations] = React.useState<SymbolOperation[]>([]);
   const [dragStart, setDragStart] = React.useState<Point | null>(null);
   const [dragPreview, setDragPreview] = React.useState<SymbolOperation[]>([]);
+  const [pendingText, setPendingText] = React.useState<{
+    point: Point;
+    value: string;
+    scale: number;
+  } | null>(null);
+  const pendingInputRef = React.useRef<HTMLInputElement>(null);
+  const pendingTextRef = React.useRef(pendingText);
+  const committingRef = React.useRef(false);
 
   const isOverlayTool =
     tool === "line" ||
@@ -388,6 +399,50 @@ const SymbolCreation = () => {
     eraseGeometryAtPoint(point);
   };
 
+  // Keep a ref copy so commit logic never reads a stale closure and never
+  // nests one state setter inside another (which StrictMode drops).
+  React.useEffect(() => {
+    pendingTextRef.current = pendingText;
+  }, [pendingText]);
+
+  const commitPendingText = () => {
+    if (committingRef.current) return;
+    const current = pendingTextRef.current;
+    if (!current) return;
+
+    committingRef.current = true;
+    const value = current.value.trim();
+
+    if (value) {
+      setOperations((previous) => [
+        ...previous,
+        {
+          operation: "text",
+          text: value,
+          position: current.point,
+          fontSize,
+        },
+      ]);
+    }
+
+    setPendingText(null);
+    // Release the guard after this event so Enter + the resulting blur
+    // cannot commit the same text twice.
+    window.setTimeout(() => {
+      committingRef.current = false;
+    }, 0);
+  };
+
+  const cancelPendingText = () => setPendingText(null);
+
+  // Focus on the next frame so the placing click cannot blur the input
+  // before it mounts, which previously discarded the editor instantly.
+  React.useEffect(() => {
+    if (!pendingText) return;
+    const id = requestAnimationFrame(() => pendingInputRef.current?.focus());
+    return () => cancelAnimationFrame(id);
+  }, [pendingText]);
+
   const handleOverlayPointerDown = (
     event: React.PointerEvent<HTMLDivElement>
   ) => {
@@ -396,19 +451,15 @@ const SymbolCreation = () => {
     const point = getPointerPoint(event, drawingAreaRef.current);
 
     if (tool === "text") {
-      const textValue = symbolText.trim();
-
-      if (!textValue) return;
-
-      setOperations((previous) => [
-        ...previous,
-        {
-          operation: "text",
-          text: textValue,
-          position: roundPoint(point),
-        },
-      ]);
-
+      // Place an inline editor exactly where the user clicked instead of
+      // opening a blocking dialog. Commit happens on Enter / blur.
+      commitPendingText();
+      const rect = drawingAreaRef.current.getBoundingClientRect();
+      setPendingText({
+        point: roundPoint(point),
+        value: symbolText,
+        scale: rect.width / CANVAS_SIZE,
+      });
       return;
     }
 
@@ -614,6 +665,24 @@ const SymbolCreation = () => {
             />
           </div>
 
+          <div className="mb-5">
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-sm font-medium text-slate-300">
+                Text size
+              </label>
+              <span className="text-sm text-slate-400">{fontSize}px</span>
+            </div>
+
+            <input
+              type="range"
+              min="8"
+              max="96"
+              value={fontSize}
+              onChange={(event) => setFontSize(Number(event.target.value))}
+              className="w-full accent-cyan-400"
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -693,6 +762,49 @@ const SymbolCreation = () => {
                   onPointerUp={handleOverlayPointerUp}
                   onPointerLeave={handleOverlayPointerUp}
                   className="absolute inset-0 z-20 cursor-crosshair"
+                />
+              )}
+
+              {pendingText && (
+                <input
+                  ref={pendingInputRef}
+                  autoFocus
+                  onPointerDown={(event) => event.stopPropagation()}
+                  value={pendingText.value}
+                  onChange={(event) =>
+                    setPendingText((current) =>
+                      current
+                        ? { ...current, value: event.target.value }
+                        : current
+                    )
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      commitPendingText();
+                    } else if (event.key === "Escape") {
+                      event.preventDefault();
+                      cancelPendingText();
+                    }
+                  }}
+                  onBlur={commitPendingText}
+                  placeholder="Type text, Enter to place"
+                  style={{
+                    position: "absolute",
+                    left: `${(pendingText.point.x / CANVAS_SIZE) * 100}%`,
+                    top: `${(pendingText.point.y / CANVAS_SIZE) * 100}%`,
+                    transform: "translateY(-0.85em)",
+                    fontSize: `${fontSize * pendingText.scale}px`,
+                    fontFamily: "Arial, sans-serif",
+                    lineHeight: 1,
+                    color: "black",
+                    background: "rgba(255,255,255,0.9)",
+                    border: "1px dashed #06b6d4",
+                    outline: "none",
+                    padding: "0 2px",
+                    minWidth: "40px",
+                  }}
+                  className="z-30"
                 />
               )}
             </div>
