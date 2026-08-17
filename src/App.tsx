@@ -9,10 +9,11 @@ const Projects = lazy(() => import("@/pages/Components"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const Drawings = lazy(() => import("@/pages/Drawings"));
 const SymbolCreation = lazy(() => import("@/pages/SymbolCreation"));
+const ComponentEditor = lazy(() => import("@/pages/ComponentEditor"));
 
 export default function App() {
   return (
-    <Layout>
+    
       <Suspense fallback={<LoadingScreen />}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
@@ -20,8 +21,9 @@ export default function App() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/drawings" element={<Drawings />} />
           <Route path="/SymbolCreation" element={<SymbolCreation />} />
+          <Route path="/ComponentEditor/:componentId" element={<ComponentEditor />} />
         </Routes>
       </Suspense>
-    </Layout>
+    
   );
 }

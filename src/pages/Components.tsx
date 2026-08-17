@@ -5,6 +5,7 @@ import {MagneticButtonDemo} from "@/components/ui/MagneticButtonDemo"
 import {
   Navigate,
   useLocation,
+  useNavigate
 } from "react-router-dom";
 import {
   Select,
@@ -82,6 +83,7 @@ const withoutExtension = (value: string): string => {
 };
 export default function Projects() {
   const location = useLocation();
+  const navigate = useNavigate();
   const storedProject = localStorage.getItem("activeProject");
   const selectedProject =
     (location.state as SelectedProject | null) ??
@@ -246,6 +248,9 @@ useEffect(() => {
 
   return null;
 };
+  const handleClick = () => {
+      console.log("clicked");
+    };
   //console.log(`symbolMap: ${JSON.stringify(symbolMap)}`);
 return (
   <div>
@@ -359,125 +364,148 @@ return (
             </CardHeader>
 
             <CardFooter className="flex flex-col items-stretch gap-4 border-t pt-4">
-              <Select
-                value={selectedView[component.component_id] ?? ""}
-                onValueChange={(value) =>
-                  setSelectedView((previous) => ({
-                    ...previous,
-                    [component.component_id]: value ?? "",
-                  }))
-                }
-              >
-                <Button variant="destructive">
-                <Trash2 className="mr-2 h-4 w-4" />
-                Edit
-              </Button>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select relationship" />
-                </SelectTrigger>
+  <div className="grid grid-cols-2 gap-3">
+    <Button
+  type="button"
+  variant="destructive"
+  className="h-10 w-full justify-center"
+  onClick={() => {
+    console.log("Editing component:", component.component_id);
+    console.log("Symbol URL:", symbolUrl);
+    navigate(`/ComponentEditor/${encodeURIComponent(component.component_id)}`, {
+      state: {
+        componentId: component.component_id,
+        displayName: component.display_name,
+        componentTag: component.component_tag,
+        componentType: component.component_type,
+        componentSubtype: component.component_subtype,
+        componentClass: component.component_class,
+        filepath: component.filepath,
+        symbolUrl: symbolUrl,
+      },
+    });
+  }}
+>
+  
+  Edit
+</Button>
 
-                <SelectContent>
-                  <SelectItem value="parent">
-                    Parent Component
-                  </SelectItem>
-                  <SelectItem value="children">
-                    Child Components
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+    <Select
+      value={selectedView[component.component_id] ?? ""}
+      onValueChange={(value) =>
+        setSelectedView((previous) => ({
+          ...previous,
+          [component.component_id]: value ?? "",
+        }))
+      }
+    >
+      <SelectTrigger className="h-10 w-full">
+        <SelectValue placeholder="Select relationship" />
+      </SelectTrigger>
 
-              {selectedView[component.component_id] === "parent" && (
-                <div className="rounded-lg border bg-background p-3 text-sm">
-                  <h4 className="mb-2 font-medium">
-                    Parent Component
-                  </h4>
+      <SelectContent>
+        <SelectItem value="parent">
+          Parent Component
+        </SelectItem>
+        <SelectItem value="children">
+          Child Components
+        </SelectItem>
+      </SelectContent>
+    </Select>
+  </div>
 
-                  {component.parent_component ? (
-                    <div className="space-y-1">
-                      <p>
-                        <span className="text-muted-foreground">
-                          Name:{" "}
-                        </span>
-                        {component.parent_component.display_name}
-                      </p>
+  {selectedView[component.component_id] === "parent" && (
+    <div className="rounded-lg border bg-background p-3 text-sm">
+      <h4 className="mb-2 font-medium">
+        Parent Component
+      </h4>
 
-                      <p>
-                        <span className="text-muted-foreground">
-                          Tag:{" "}
-                        </span>
-                        {component.parent_component.component_tag}
-                      </p>
+      {component.parent_component ? (
+        <div className="space-y-1">
+          <p>
+            <span className="text-muted-foreground">
+              Name:{" "}
+            </span>
+            {component.parent_component.display_name}
+          </p>
 
-                      <p>
-                        <span className="text-muted-foreground">
-                          Type:{" "}
-                        </span>
-                        {component.parent_component.component_type}
-                      </p>
+          <p>
+            <span className="text-muted-foreground">
+              Tag:{" "}
+            </span>
+            {component.parent_component.component_tag}
+          </p>
 
-                      <p className="break-all">
-                        <span className="text-muted-foreground">
-                          ID:{" "}
-                        </span>
-                        {component.parent_component.component_id}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground">
-                      No parent component.
-                    </p>
-                  )}
-                </div>
-              )}
+          <p>
+            <span className="text-muted-foreground">
+              Type:{" "}
+            </span>
+            {component.parent_component.component_type}
+          </p>
 
-              {selectedView[component.component_id] === "children" && (
-                <div className="rounded-lg border bg-background p-3 text-sm">
-                  <h4 className="mb-2 font-medium">
-                    Child Components
-                  </h4>
+          <p className="break-all">
+            <span className="text-muted-foreground">
+              ID:{" "}
+            </span>
+            {component.parent_component.component_id}
+          </p>
+        </div>
+      ) : (
+        <p className="text-muted-foreground">
+          No parent component.
+        </p>
+      )}
+    </div>
+  )}
 
-                  {component.children.length > 0 ? (
-                    <div className="space-y-3">
-                      {component.children.map((child) => (
-                        <div
-                          key={child.component_id}
-                          className="rounded-md border bg-muted/30 p-3"
-                        >
-                          <p className="font-medium">
-                            {child.display_name || "Unnamed Child"}
-                          </p>
+  {selectedView[component.component_id] === "children" && (
+    <div className="rounded-lg border bg-background p-3 text-sm">
+      <h4 className="mb-2 font-medium">
+        Child Components
+      </h4>
 
-                          <p>
-                            <span className="text-muted-foreground">
-                              Tag:{" "}
-                            </span>
-                            {child.component_tag || "N/A"}
-                          </p>
+      {component.children.length > 0 ? (
+        <div className="space-y-3">
+          {component.children.map((child) => (
+            <div
+              key={child.component_id}
+              className="rounded-md border bg-muted/30 p-3"
+            >
+              <p className="font-medium">
+                {child.display_name || "Unnamed Child"}
+              </p>
 
-                          <p>
-                            <span className="text-muted-foreground">
-                              Type:{" "}
-                            </span>
-                            {child.component_type || "N/A"}
-                          </p>
+              <p>
+                <span className="text-muted-foreground">
+                  Tag:{" "}
+                </span>
+                {child.component_tag || "N/A"}
+              </p>
 
-                          <p className="break-all">
-                            <span className="text-muted-foreground">
-                              ID:{" "}
-                            </span>
-                            {child.component_id}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground">
-                      No child components found.
-                    </p>
-                  )}
-                </div>
-              )}
-            </CardFooter>
+              <p>
+                <span className="text-muted-foreground">
+                  Type:{" "}
+                </span>
+                {child.component_type || "N/A"}
+              </p>
+
+              <p className="break-all">
+                <span className="text-muted-foreground">
+                  ID:{" "}
+                </span>
+                {child.component_id}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-muted-foreground">
+          No child components found.
+        </p>
+      )}
+    </div>
+  )}
+</CardFooter>
           </Card>
         );
       })}

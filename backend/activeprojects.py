@@ -6,9 +6,24 @@ from azure.storage.filedatalake import DataLakeServiceClient
 from flask import send_file
 from io import BytesIO
 from urllib.parse import quote, unquote
-
+import time
+from flask import send_file
+from io import BytesIO
+import mimetypes
 app = Flask(__name__)
 CORS(app)
+
+FABRIC_WORKSPACE_ID = "6fa210ce-add4-4200-83f3-c84936e9cce6"
+FABRIC_LAKEHOUSE_ID = "3dd2ed61-24ab-405c-92d0-f4f27aeadb7c"
+
+LIVY_BASE_URL = (
+    f"https://api.fabric.microsoft.com/v1/"
+    f"workspaces/{FABRIC_WORKSPACE_ID}/"
+    f"lakehouses/{FABRIC_LAKEHOUSE_ID}/"
+    f"livyapi/versions/2023-12-01"
+)
+
+livy_session_id = None
 
 workspace_name = "WS_DesignServices_Engineering_Data_DEV"
 # Development authentication only.
@@ -86,13 +101,136 @@ query {
 """
 
 
+def create_livy_session():
+    global livy_session_id
 
-from flask import send_file
-from io import BytesIO
-import mimetypes
+    fabric_token = credential.get_token(
+        "https://api.fabric.microsoft.com/.default"
+    )
+
+    headers = {
+        "Authorization": f"Bearer {fabric_token.token}",
+        "Content-Type": "application/json"
+    }
+
+    response = requests.post(
+        f"{LIVY_BASE_URL}/sessions",
+        headers=headers,
+        json={"kind": "pyspark"}
+    )
+
+    response.raise_for_status()
+
+    livy_session_id = response.json()["id"]
+
+    while True:
+        status = requests.get(
+            f"{LIVY_BASE_URL}/sessions/{livy_session_id}",
+            headers=headers
+        ).json()
+
+        state = (
+            status.get("state")
+            or status.get("livyInfo", {}).get("currentState")
+            or ""
+        )
+
+        if state.lower() == "idle":
+            break
+
+        if state.lower() in ["error", "dead", "failed"]:
+            raise RuntimeError(
+                f"Failed to create Livy session: {status}"
+            )
+
+        time.sleep(5)
+
+    print(f"Livy session ready: {livy_session_id}")
+def get_livy_session():
+    global livy_session_id
+
+    if livy_session_id is None:
+        create_livy_session()
+
+    return livy_session_id
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+@app.route("/components/update", methods=["POST"])
+def update_component():
+
+    try:
+        data = request.get_json()
+
+        component_id = data["component_id"]
+        field = data["field"]
+        value = data["value"]
+
+        allowed_fields = {
+    "project_id",
+    "parent_component_id",
+    "source_component_template_id",
+    "component_tag",
+    "display_name",
+    "component_class",
+    "component_type",
+    "component_subtype",
+    "relationship_role",
+    "sequence_no",
+    "status",
+    "attributes",
+    "filepath",
+    "symbol_geom"
+}
+
+        if field not in allowed_fields:
+            return jsonify({
+                "error": f"{field} is not editable"
+            }), 400
+
+        fabric_token = credential.get_token(
+            "https://api.fabric.microsoft.com/.default"
+        )
+
+        headers = {
+            "Authorization": f"Bearer {fabric_token.token}",
+            "Content-Type": "application/json"
+        }
+
+        session_id = get_livy_session()
+
+        spark_code = f"""
+spark.sql(\"\"\"
+UPDATE WS_DesignServices_Engineering_Data_DEV.LH_DS_ENG_SLV.dbo.component
+SET {field} = '{value}'
+WHERE component_id = '{component_id}'
+\"\"\")
+"""
+
+        response = requests.post(
+            f"{LIVY_BASE_URL}/sessions/{session_id}/statements",
+            headers=headers,
+            json={
+                "kind": "pyspark",
+                "code": spark_code
+            }
+        )
+
+        return jsonify(response.json())
+
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 500
 
 @app.route("/files/content", methods=["GET"])
 def get_file_content():
@@ -504,6 +642,7 @@ def get_components():
 
 
 if __name__ == "__main__":
+    create_livy_session()
     print(app.url_map)
     app.run(
     port=5000,
