@@ -1,0 +1,367 @@
+function main(workbook: ExcelScript.Workbook) {
+    // ===============================
+    // SETUP
+    // ===============================
+    const sourceSheet = workbook.getActiveWorksheet();
+    sourceSheet.activate();
+
+    // ===============================
+    // SCOPE TOTAL ACCUMULATORS
+    // ===============================
+    const scopeTotals: { [key: string]: number } = {
+        Power: 0,
+        Storage: 0,
+        Wind: 0,
+        Solar: 0
+    };
+
+    let taskFamily: string = workbook.getName().split("", 6).join("");
+
+    const usedRange = sourceSheet.getUsedRange();
+    const autoFilter = sourceSheet.getAutoFilter();
+
+    if (!usedRange) {
+        console.log("No data found.");
+        return;
+    }
+
+    const visibleValues = usedRange.getVisibleView().getValues();
+    if (visibleValues.length < 2) return;
+
+    // ===============================
+    // COLUMN LOOKUP
+    // ===============================
+    const headers = visibleValues[0].map(h => String(h).trim());
+
+    const colFullName = headers.indexOf("Full Name");
+    const colJobName = headers.indexOf("Job Name");
+    const colTaskName = headers.indexOf("Task Name");
+    const colTaskNumber = headers.indexOf("Task Number");
+    const colHours = headers.indexOf("Total Hours");
+
+    if ([colFullName, colJobName, colTaskName, colTaskNumber, colHours].includes(-1)) {
+        throw new Error("One or more required columns are missing.");
+    }
+
+    // ===============================
+    // HELPERS
+    // ===============================
+    function formatName(name: string): string {
+        if (!name.includes(",")) return name;
+        const [last, first] = name.split(",").map(v => v.trim());
+        return `${first} ${last}`;
+    }
+
+    const rateByTitle: { [key: string]: number } = {
+        // Leadership
+        "Director": 375,
+        "Director of Engineering Services": 375,
+        "Manager of Engineering Services": 332,
+        "Manager of Engineering": 332,
+        "GAP": 323,
+
+        // Engineering Leads
+        "Sr Engineering Lead": 306,
+        "Senior Engineering Project Manager II": 306,
+        "Integrated Construction Manager": 227,
+        "Senior Engineering Lead": 306,
+        "Engineering Lead II": 280,
+        "Engineering Lead I": 245,
+        "Engineer V": 245,
+        "Engineer V/Engineering Lead I": 245,
+
+        // Engineers
+        "Engineer IV": 218,
+        "Engineer III": 192,
+        "Engineer II": 175,
+        "Engineer I": 157,
+
+        // Project Management
+        "Sr. Project Manager II": 306,
+        "Senior Project Manager II": 306,
+        "Sr. Project Manager I": 280,
+        "Senior Project Manager I": 280,
+        "Engineering Project Manager II": 218,
+        "Engineering Project Manager I": 192,
+        "Assistant Project Manager": 166,
+
+        // ICC Roles
+        "ICC Manager": 227,
+        "Sr. ICC": 192,
+        "Senior ICC": 192,
+        "ICC II": 175,
+        "ICC I": 148,
+
+        // Designers
+        "Sr. Designer": 210,
+        "Senior Designer": 210,
+        "Designer II": 201,
+        "Designer I": 157,
+
+        // Drafters
+        "Sr. Drafter": 157,
+        "Senior Drafter": 157,
+        "Drafter III": 148,
+        "Drafter II": 131,
+        "Drafter I": 122,
+
+        // Other
+        "Executive Assistant": 148,
+        "Intern": 105,
+        "Intern - Operations 4": 105,
+
+        // Legacy / compatibility
+        "Integrated Construction Coordinator I": 148,
+        "Senior Integrated Construction Coordinator": 192
+    };
+
+    function getRate(job: string): number {
+        return rateByTitle[job] ?? 0;
+    }
+
+    const scopeLookup: { [key: number]: string } = {
+        100: "Power",
+        102: "Power",
+        23000060: "Storage",
+        200: "Storage",
+        202: "Storage",
+        300: "Solar",
+        302: "Solar",
+        400: "Wind",
+        402: "Wind"
+    };
+
+    function getScope(taskNumber: number): string {
+        return scopeLookup[Math.trunc(taskNumber)] ?? "Unknown";
+    }
+
+    function applyTableBorders(range: ExcelScript.Range) {
+        const borders = [
+            ExcelScript.BorderIndex.edgeTop,
+            ExcelScript.BorderIndex.edgeBottom,
+            ExcelScript.BorderIndex.edgeLeft,
+            ExcelScript.BorderIndex.edgeRight,
+            ExcelScript.BorderIndex.insideHorizontal,
+            ExcelScript.BorderIndex.insideVertical
+        ];
+
+        for (const border of borders) {
+            range.getFormat()
+                .getRangeBorder(border)
+                .setStyle(ExcelScript.BorderLineStyle.continuous);
+        }
+    }
+
+    // ===============================
+    // PREP OUTPUT SHEETS
+    // ===============================
+    const scopes = ["Power", "Storage", "Wind", "Solar"];
+    const scopeSheets: { [key: string]: ExcelScript.Worksheet } = {};
+    const scopeRow: { [key: string]: number } = {};
+
+    for (const scope of scopes) {
+        let sheet = workbook.getWorksheet(scope);
+        if (!sheet) sheet = workbook.addWorksheet(scope);
+        sheet.getUsedRange()?.clear();
+        scopeSheets[scope] = sheet;
+        scopeRow[scope] = 1;
+    }
+
+    // ===============================
+    // UNIQUE TASK NUMBERS
+    // ===============================
+    const taskSet = new Set<number>();
+
+    for (let i = 1; i < visibleValues.length; i++) {
+        const val = Number(visibleValues[i][colTaskNumber]);
+        if (!isNaN(val)) taskSet.add(val);
+    }
+
+    const taskNumbers = Array.from(taskSet).sort((a, b) => a - b);
+
+    // ===============================
+    // MAIN LOOP (PER TASK)
+    // ===============================
+    for (const taskNumber of taskNumbers) {
+        const taskScope = getScope(taskNumber);
+        if (!(taskScope in scopeSheets)) continue;
+
+        autoFilter?.apply(
+            usedRange,
+            colTaskNumber,
+            { filterOn: ExcelScript.FilterOn.custom, criterion1: "=" + taskNumber }
+        );
+
+        const colDate = 4; // Column E (0-based index)
+
+        autoFilter?.apply(
+            usedRange,
+            colDate,
+            {
+                filterOn: ExcelScript.FilterOn.custom,
+                criterion1: ">=1/1/2026"
+            }
+        );
+
+        const rows = sourceSheet.getUsedRange()?.getVisibleView().getValues();
+        if (!rows || rows.length < 2) continue;
+
+        const taskName = String(rows[1][colTaskName] ?? `Task ${taskNumber}`);
+        const targetSheet = scopeSheets[taskScope];
+        let row = scopeRow[taskScope];
+
+        // ===============================
+        // PROJECT TITLE
+        // ===============================
+        const titleRange = targetSheet.getRange(`A${row}:E${row}`);
+        const projectCodeRange = targetSheet.getRange(`A${row + 1}:G${row + 1}`);
+
+        titleRange.merge();
+        titleRange.setValue(taskName);
+
+        // ✅ Show ONLY the project code (task number), no workbook prefix
+        projectCodeRange.merge();
+        const taskNumberDisplay = String(rows[1][colTaskNumber] ?? taskNumber);
+        projectCodeRange.setValue(taskNumberDisplay);
+
+        titleRange.getFormat().getFont().setBold(true);
+        titleRange.getFormat().getFont().setSize(14);
+        titleRange.getFormat().getFont().setColor("#0070C0");
+
+        projectCodeRange.getFormat().getFont().setBold(true);
+        projectCodeRange.getFormat().getFont().setSize(14);
+        projectCodeRange.getFormat().getFont().setColor("#0070C0");
+        projectCodeRange.getFormat().setHorizontalAlignment(
+            ExcelScript.HorizontalAlignment.left
+        );
+
+        row += 2;
+
+        // ===============================
+        // HEADER
+        // ===============================
+        const headerRange = targetSheet.getRange(`A${row}:E${row}`);
+        headerRange.setValues([[
+            "Team Member",
+            "Scope",
+            "Billable Hours",
+            "Billable Rate",
+            "Cost to Date"
+        ]]);
+        headerRange.getFormat().getFont().setBold(true);
+        headerRange.getFormat().getFill().setColor("#D9D9D9");
+        headerRange.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+        applyTableBorders(headerRange);
+        row++;
+
+        const dataStartRow = row;
+
+        // ===============================
+        // AGGREGATION (DEDUPLICATION)
+        // ===============================
+        const people: {
+            [key: string]: {
+                name: string;
+                scope: string;
+                hours: number;
+                rate: number;
+            };
+        } = {};
+
+        for (let i = 1; i < rows.length; i++) {
+            const name = formatName(String(rows[i][colFullName] ?? ""));
+            const job = String(rows[i][colJobName] ?? "");
+            const hours = Number(rows[i][colHours] ?? 0);
+
+            if (!name || !job || isNaN(hours)) continue;
+
+            const key = `${name}|${job}|${taskScope}`;
+
+            if (!people[key]) {
+                people[key] = {
+                    name,
+                    scope: taskScope,
+                    hours: 0,
+                    rate: getRate(job)
+                };
+            }
+
+            people[key].hours += hours;
+        }
+
+        // ===============================
+        // WRITE DATA ROWS
+        // ===============================
+        let totalCost = 0;
+
+        for (const key in people) {
+            const p = people[key];
+            const cost = p.hours * p.rate;
+            totalCost += cost;
+
+            targetSheet.getRange(`A${row}:E${row}`).setValues([[
+                p.name,
+                p.scope,
+                p.hours,
+                p.rate,
+                cost
+            ]]);
+
+            row++;
+        }
+
+        if (row > dataStartRow) {
+            const dataRange = targetSheet.getRange(`A${dataStartRow}:E${row - 1}`);
+            applyTableBorders(dataRange);
+        }
+
+        // ===============================
+        // TOTAL ROW
+        // ===============================
+        const totalRange = targetSheet.getRange(`A${row}:E${row}`);
+        totalRange.setValues([["", "", "", "Total:", totalCost]]);
+        totalRange.getFormat().getFont().setBold(true);
+        applyTableBorders(totalRange);
+        row += 3;
+
+        scopeRow[taskScope] = row;
+        scopeTotals[taskScope] += totalCost;
+    }
+
+    // ===============================
+    // FINAL SCOPE TOTALS
+    // ===============================
+    for (const scope of scopes) {
+        const sheet = scopeSheets[scope];
+        let row = scopeRow[scope];
+
+        // Spacer row
+        row++;
+
+        // Label (A:D)
+        const labelRange = sheet.getRange(`A${row}:D${row}`);
+        labelRange.merge();
+        labelRange.setValue(`TOTAL ${scope.toUpperCase()} RETAINER YTD`);
+
+        // Value (E)
+        const valueRange = sheet.getRange(`E${row}`);
+        valueRange.setValue(`$${scopeTotals[scope]}`);
+
+        // Formatting
+        labelRange.getFormat().getFont().setBold(true);
+        labelRange.getFormat().setHorizontalAlignment(
+            ExcelScript.HorizontalAlignment.left
+        );
+
+        valueRange.getFormat().getFont().setBold(true);
+        valueRange.getFormat().setHorizontalAlignment(
+            ExcelScript.HorizontalAlignment.right
+        );
+    }
+
+    // ===============================
+    // CLEANUP
+    // ===============================
+    console.log("finished");
+    autoFilter?.remove();
+}
