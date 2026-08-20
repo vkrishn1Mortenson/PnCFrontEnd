@@ -20,10 +20,9 @@ cd backend
 pip install -m requirements.txt
 ```
 
-## Using components
+## Sharepoint metadata extractor
 
-To use the components in your app, import them as follows:
-
-```tsx
-import { Button } from "@/components/ui/button"
+Simply download the py file and run it from a terminal or use VSCode. It will prompt you to login via browser when run. For terminal:
+```bash
+python3 "<path to where the py file is>/Metadata_Update.py"
 ```
