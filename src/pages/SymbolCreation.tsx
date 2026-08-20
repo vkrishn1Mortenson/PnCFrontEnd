@@ -8,31 +8,60 @@ type Point = {
   y: number;
 };
 
-type SymbolOperation =
-  | {
-      operation: "line";
-      origin: Point;
-      destination: Point;
-    }
-  | {
-      operation: "curve";
-      origin: Point;
-      destination: Point;
-      controlOrigin: Point;
-      controlDestination: Point;
-    }
-  | {
-      operation: "text";
-      text: string;
-      position: Point;
-      fontSize: number;
-    };
+type Bounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type GeometryShape = {
+  kind: "geometry";
+  points: Point[];
+  isClosed: boolean;
+};
+
+type TextShape = {
+  kind: "text";
+  text: string;
+  position: Point;
+  fontSize: number;
+};
+
+type SymbolShape = GeometryShape | TextShape;
+
+// Output element schema consumed downstream (matches symbols.json).
+type GeometryElement = {
+  kind: "geometry";
+  points: Point[];
+  isClosed: boolean;
+};
+
+type TextElement = {
+  kind: "text";
+  position: Point;
+  bounds: Bounds;
+  text: string;
+};
+
+type SymbolElement = GeometryElement | TextElement;
+
+type ModelNode = {
+  id: string;
+  kind: "geometry" | "text";
+  bounds: Bounds;
+  center: Point;
+  childIds: string[];
+  points: Point[];
+  text?: string;
+  pattern?: string;
+};
 
 type Tool = "marker" | "eraser" | "line" | "rectangle" | "ellipse" | "text";
 
 const CANVAS_SIZE = 512;
 const DEFAULT_FONT_SIZE = 28;
-const CURVE_KAPPA = 0.5522847498;
+const ELLIPSE_SEGMENTS = 64;
 
 const slugify = (value: string) =>
   value
@@ -55,9 +84,7 @@ const distance = (a: Point, b: Point) => {
 const pointToSegmentDistance = (point: Point, start: Point, end: Point) => {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
-
   if (dx === 0 && dy === 0) return distance(point, start);
-
   const t = Math.max(
     0,
     Math.min(
@@ -66,44 +93,106 @@ const pointToSegmentDistance = (point: Point, start: Point, end: Point) => {
         (dx * dx + dy * dy)
     )
   );
-
   const projection = {
     x: start.x + t * dx,
     y: start.y + t * dy,
   };
-
   return distance(point, projection);
 };
 
-const getOperationDistance = (point: Point, operation: SymbolOperation) => {
-  if (operation.operation === "line") {
-    return pointToSegmentDistance(point, operation.origin, operation.destination);
+const getShapeDistance = (point: Point, shape: SymbolShape) => {
+  if (shape.kind === "text") {
+    return distance(point, shape.position);
   }
-
-  if (operation.operation === "curve") {
-    return Math.min(
-      pointToSegmentDistance(point, operation.origin, operation.destination),
-      distance(point, operation.origin),
-      distance(point, operation.destination),
-      distance(point, operation.controlOrigin),
-      distance(point, operation.controlDestination)
+  const { points, isClosed } = shape;
+  if (points.length === 0) return Number.POSITIVE_INFINITY;
+  if (points.length === 1) return distance(point, points[0]);
+  let closest = Number.POSITIVE_INFINITY;
+  for (let i = 1; i < points.length; i++) {
+    closest = Math.min(
+      closest,
+      pointToSegmentDistance(point, points[i - 1], points[i])
     );
   }
-
-  return distance(point, operation.position);
+  if (isClosed) {
+    closest = Math.min(
+      closest,
+      pointToSegmentDistance(point, points[points.length - 1], points[0])
+    );
+  }
+  return closest;
 };
+
+const boundsFromPoints = (points: Point[]): Bounds => {
+  if (points.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  points.forEach((p) => {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  });
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+};
+
+const centerOfBounds = (bounds: Bounds): Point => ({
+  x: bounds.x + bounds.width / 2,
+  y: bounds.y + bounds.height / 2,
+});
+
+const measureContext =
+  typeof document !== "undefined"
+    ? document.createElement("canvas").getContext("2d")
+    : null;
+
+const measureTextWidth = (text: string, fontSize: number) => {
+  if (measureContext) {
+    measureContext.font = `${fontSize}px Arial, sans-serif`;
+    return measureContext.measureText(text).width;
+  }
+  return text.length * fontSize * 0.6;
+};
+
+// Bounds top-left, box, and center for a placed text shape. The stored point is
+// the baseline anchor used while drawing; export reports the box center.
+const textMetrics = (shape: TextShape) => {
+  const width = measureTextWidth(shape.text, shape.fontSize);
+  const height = shape.fontSize;
+  const bounds: Bounds = {
+    x: shape.position.x,
+    y: shape.position.y - height,
+    width,
+    height,
+  };
+  return { bounds, center: centerOfBounds(bounds), width, height };
+};
+
+const escapeRegExp = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const toPattern = (text: string) => `/^${escapeRegExp(text)}$/`;
 
 const downloadBlob = (blob: Blob, fileName: string) => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-
   link.href = url;
   link.download = fileName;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-
   URL.revokeObjectURL(url);
+};
+
+const uploadSymbol = async (blob: Blob, fileName: string) => {
+  const body = new FormData();
+  body.append("file", blob, fileName);
+  await fetch("http://localhost:5000/symbols/upload", {
+    method: "POST",
+    body,
+  });
 };
 
 const loadImage = (src: string): Promise<HTMLImageElement> => {
@@ -128,168 +217,197 @@ const getPointerPoint = (
   element: HTMLDivElement
 ): Point => {
   const rect = element.getBoundingClientRect();
-
   return {
     x: ((event.clientX - rect.left) / rect.width) * CANVAS_SIZE,
     y: ((event.clientY - rect.top) / rect.height) * CANVAS_SIZE,
   };
 };
 
-const rectangleToOperations = (start: Point, end: Point): SymbolOperation[] => {
+const rectangleToShape = (start: Point, end: Point): GeometryShape => {
   const left = Math.min(start.x, end.x);
   const right = Math.max(start.x, end.x);
   const top = Math.min(start.y, end.y);
   const bottom = Math.max(start.y, end.y);
-
-  const p1 = roundPoint({ x: left, y: top });
-  const p2 = roundPoint({ x: right, y: top });
-  const p3 = roundPoint({ x: right, y: bottom });
-  const p4 = roundPoint({ x: left, y: bottom });
-
-  return [
-    { operation: "line", origin: p1, destination: p2 },
-    { operation: "line", origin: p2, destination: p3 },
-    { operation: "line", origin: p3, destination: p4 },
-    { operation: "line", origin: p4, destination: p1 },
-  ];
+  return {
+    kind: "geometry",
+    isClosed: true,
+    points: [
+      roundPoint({ x: left, y: top }),
+      roundPoint({ x: right, y: top }),
+      roundPoint({ x: right, y: bottom }),
+      roundPoint({ x: left, y: bottom }),
+    ],
+  };
 };
 
-const ellipseToOperations = (start: Point, end: Point): SymbolOperation[] => {
+const ellipseToShape = (start: Point, end: Point): GeometryShape => {
   const left = Math.min(start.x, end.x);
   const right = Math.max(start.x, end.x);
   const top = Math.min(start.y, end.y);
   const bottom = Math.max(start.y, end.y);
-
   const cx = (left + right) / 2;
   const cy = (top + bottom) / 2;
   const rx = (right - left) / 2;
   const ry = (bottom - top) / 2;
-
-  const kx = rx * CURVE_KAPPA;
-  const ky = ry * CURVE_KAPPA;
-
-  const topPoint = roundPoint({ x: cx, y: top });
-  const rightPoint = roundPoint({ x: right, y: cy });
-  const bottomPoint = roundPoint({ x: cx, y: bottom });
-  const leftPoint = roundPoint({ x: left, y: cy });
-
-  return [
-    {
-      operation: "curve",
-      origin: topPoint,
-      destination: rightPoint,
-      controlOrigin: roundPoint({ x: cx + kx, y: top }),
-      controlDestination: roundPoint({ x: right, y: cy - ky }),
-    },
-    {
-      operation: "curve",
-      origin: rightPoint,
-      destination: bottomPoint,
-      controlOrigin: roundPoint({ x: right, y: cy + ky }),
-      controlDestination: roundPoint({ x: cx + kx, y: bottom }),
-    },
-    {
-      operation: "curve",
-      origin: bottomPoint,
-      destination: leftPoint,
-      controlOrigin: roundPoint({ x: cx - kx, y: bottom }),
-      controlDestination: roundPoint({ x: left, y: cy + ky }),
-    },
-    {
-      operation: "curve",
-      origin: leftPoint,
-      destination: topPoint,
-      controlOrigin: roundPoint({ x: left, y: cy - ky }),
-      controlDestination: roundPoint({ x: cx - kx, y: top }),
-    },
-  ];
+  const points: Point[] = [];
+  for (let i = 0; i < ELLIPSE_SEGMENTS; i++) {
+    const angle = (i / ELLIPSE_SEGMENTS) * Math.PI * 2;
+    points.push(
+      roundPoint({
+        x: cx + rx * Math.cos(angle),
+        y: cy + ry * Math.sin(angle),
+      })
+    );
+  }
+  return { kind: "geometry", isClosed: true, points };
 };
 
-const sketchPathsToOperations = (
+const lineToShape = (start: Point, end: Point): GeometryShape => ({
+  kind: "geometry",
+  isClosed: false,
+  points: [roundPoint(start), roundPoint(end)],
+});
+
+const sketchPathsToShapes = (
   paths: any[],
   renderedWidth: number,
   renderedHeight: number
-): SymbolOperation[] => {
-  const operations: SymbolOperation[] = [];
-
+): GeometryShape[] => {
+  const shapes: GeometryShape[] = [];
   const scaleX = CANVAS_SIZE / renderedWidth;
   const scaleY = CANVAS_SIZE / renderedHeight;
-
   paths.forEach((path) => {
     if (!path.drawMode || !Array.isArray(path.paths)) return;
-
-    for (let i = 1; i < path.paths.length; i++) {
-      const origin = path.paths[i - 1];
-      const destination = path.paths[i];
-
-      if (!origin || !destination) continue;
-      if (distance(origin, destination) < 1) continue;
-
-      operations.push({
-        operation: "line",
-        origin: roundPoint({
-          x: origin.x * scaleX,
-          y: origin.y * scaleY,
-        }),
-        destination: roundPoint({
-          x: destination.x * scaleX,
-          y: destination.y * scaleY,
-        }),
-      });
+    const points: Point[] = [];
+    path.paths.forEach((raw: Point) => {
+      const scaled = roundPoint({ x: raw.x * scaleX, y: raw.y * scaleY });
+      const previous = points[points.length - 1];
+      if (previous && distance(previous, scaled) < 1) return;
+      points.push(scaled);
+    });
+    if (points.length >= 2) {
+      shapes.push({ kind: "geometry", isClosed: false, points });
     }
   });
-
-  return operations;
+  return shapes;
 };
 
-const operationsToSvgElements = (operations: SymbolOperation[]) =>
-  operations
-    .map((operation) => {
-      if (operation.operation === "line") {
-        return `<line x1="${operation.origin.x}" y1="${operation.origin.y}" x2="${operation.destination.x}" y2="${operation.destination.y}" stroke="black" stroke-width="3" stroke-linecap="round" />`;
-      }
+const pointsToAttr = (points: Point[]) =>
+  points.map((point) => `${point.x},${point.y}`).join(" ");
 
-      if (operation.operation === "curve") {
-        return `<path d="M ${operation.origin.x} ${operation.origin.y} C ${operation.controlOrigin.x} ${operation.controlOrigin.y}, ${operation.controlDestination.x} ${operation.controlDestination.y}, ${operation.destination.x} ${operation.destination.y}" fill="none" stroke="black" stroke-width="3" stroke-linecap="round" />`;
+const shapesToSvgElements = (shapes: SymbolShape[]) =>
+  shapes
+    .map((shape) => {
+      if (shape.kind === "geometry") {
+        const attr = pointsToAttr(shape.points);
+        if (shape.isClosed) {
+          return `<polygon points="${attr}" fill="none" stroke="black" stroke-width="3" stroke-linejoin="round" />`;
+        }
+        return `<polyline points="${attr}" fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />`;
       }
-
-      return `<text x="${operation.position.x}" y="${operation.position.y}" fill="black" font-size="${
-        operation.fontSize ?? DEFAULT_FONT_SIZE
-      }" font-family="Arial, sans-serif">${escapeXml(operation.text)}</text>`;
+      return `<text x="${shape.position.x}" y="${shape.position.y}" fill="black" font-size="${
+        shape.fontSize ?? DEFAULT_FONT_SIZE
+      }" font-family="Arial, sans-serif">${escapeXml(shape.text)}</text>`;
     })
     .join("");
 
-const SymbolPreview = ({ operations }: { operations: SymbolOperation[] }) => {
+const shapesToElements = (shapes: SymbolShape[]): SymbolElement[] =>
+  shapes.map((shape) => {
+    if (shape.kind === "geometry") {
+      return {
+        kind: "geometry",
+        points: shape.points.map(roundPoint),
+        isClosed: shape.isClosed,
+      };
+    }
+    const { bounds, center } = textMetrics(shape);
+    return {
+      kind: "text",
+      position: roundPoint(center),
+      bounds,
+      text: shape.text,
+    };
+  });
+
+const buildModel = (shapes: SymbolShape[]) => {
+  const nodes: [string, ModelNode][] = shapes.map((shape, index) => {
+    const id = `geo-${index}`;
+    const childIds = index < shapes.length - 1 ? [`geo-${index + 1}`] : [];
+    if (shape.kind === "geometry") {
+      const points = shape.points.map(roundPoint);
+      const bounds = boundsFromPoints(points);
+      return [
+        id,
+        {
+          id,
+          kind: "geometry",
+          bounds,
+          center: centerOfBounds(bounds),
+          childIds,
+          points,
+        },
+      ];
+    }
+    const { bounds, center } = textMetrics(shape);
+    return [
+      id,
+      {
+        id,
+        kind: "text",
+        bounds,
+        center: roundPoint(center),
+        childIds,
+        points: [],
+        text: shape.text,
+        pattern: toPattern(shape.text),
+      },
+    ];
+  });
+
+  const graphNodes: Record<string, { id: string; childIds: string[] }> = {};
+  nodes.forEach(([id, node]) => {
+    graphNodes[id] = { id, childIds: node.childIds };
+  });
+  const order = nodes.map(([id]) => id);
+  const rootId = order[0] ?? null;
+
+  return {
+    graph: { nodes: graphNodes, rootId, order },
+    rootId,
+    nodes,
+  };
+};
+
+const SymbolPreview = ({ shapes }: { shapes: SymbolShape[] }) => {
   return (
     <svg
       viewBox={`0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}`}
       className="pointer-events-none absolute inset-0 z-10 h-full w-full"
     >
-      {operations.map((operation, index) => {
-        if (operation.operation === "line") {
+      {shapes.map((shape, index) => {
+        if (shape.kind === "geometry") {
+          const attr = pointsToAttr(shape.points);
+          if (shape.isClosed) {
+            return (
+              <polygon
+                key={index}
+                points={attr}
+                fill="none"
+                stroke="black"
+                strokeWidth="3"
+                strokeLinejoin="round"
+              />
+            );
+          }
           return (
-            <line
+            <polyline
               key={index}
-              x1={operation.origin.x}
-              y1={operation.origin.y}
-              x2={operation.destination.x}
-              y2={operation.destination.y}
-              stroke="black"
-              strokeWidth="3"
-              strokeLinecap="round"
-            />
-          );
-        }
-
-        if (operation.operation === "curve") {
-          return (
-            <path
-              key={index}
-              d={`M ${operation.origin.x} ${operation.origin.y} C ${operation.controlOrigin.x} ${operation.controlOrigin.y}, ${operation.controlDestination.x} ${operation.controlDestination.y}, ${operation.destination.x} ${operation.destination.y}`}
+              points={attr}
               fill="none"
               stroke="black"
               strokeWidth="3"
               strokeLinecap="round"
+              strokeLinejoin="round"
             />
           );
         }
@@ -297,13 +415,13 @@ const SymbolPreview = ({ operations }: { operations: SymbolOperation[] }) => {
         return (
           <text
             key={index}
-            x={operation.position.x}
-            y={operation.position.y}
+            x={shape.position.x}
+            y={shape.position.y}
             fill="black"
-            fontSize={operation.fontSize ?? DEFAULT_FONT_SIZE}
+            fontSize={shape.fontSize ?? DEFAULT_FONT_SIZE}
             fontFamily="Arial, sans-serif"
           >
-            {operation.text}
+            {shape.text}
           </text>
         );
       })}
@@ -320,9 +438,9 @@ const SymbolCreation = () => {
   const [tool, setTool] = React.useState<Tool>("marker");
   const [strokeWidth, setStrokeWidth] = React.useState(3);
   const [fontSize, setFontSize] = React.useState(DEFAULT_FONT_SIZE);
-  const [operations, setOperations] = React.useState<SymbolOperation[]>([]);
+  const [shapes, setShapes] = React.useState<SymbolShape[]>([]);
   const [dragStart, setDragStart] = React.useState<Point | null>(null);
-  const [dragPreview, setDragPreview] = React.useState<SymbolOperation[]>([]);
+  const [dragPreview, setDragPreview] = React.useState<SymbolShape[]>([]);
   const [pendingText, setPendingText] = React.useState<{
     point: Point;
     value: string;
@@ -344,46 +462,32 @@ const SymbolCreation = () => {
     canvasRef.current.eraseMode(tool === "eraser");
   }, [tool]);
 
-  const buildShapeOperations = (start: Point, end: Point): SymbolOperation[] => {
+  const buildShape = (start: Point, end: Point): SymbolShape[] => {
     if (tool === "line") {
-      return [
-        {
-          operation: "line",
-          origin: roundPoint(start),
-          destination: roundPoint(end),
-        },
-      ];
+      return [lineToShape(start, end)];
     }
-
     if (tool === "rectangle") {
-      return rectangleToOperations(start, end);
+      return [rectangleToShape(start, end)];
     }
-
     if (tool === "ellipse") {
-      return ellipseToOperations(start, end);
+      return [ellipseToShape(start, end)];
     }
-
     return [];
   };
 
   const eraseGeometryAtPoint = (point: Point) => {
-    setOperations((previous) => {
+    setShapes((previous) => {
       if (previous.length === 0) return previous;
-
       let closestIndex = -1;
       let closestDistance = Number.POSITIVE_INFINITY;
-
-      previous.forEach((operation, index) => {
-        const operationDistance = getOperationDistance(point, operation);
-
-        if (operationDistance < closestDistance) {
-          closestDistance = operationDistance;
+      previous.forEach((shape, index) => {
+        const shapeDistance = getShapeDistance(point, shape);
+        if (shapeDistance < closestDistance) {
+          closestDistance = shapeDistance;
           closestIndex = index;
         }
       });
-
       if (closestIndex === -1 || closestDistance > 18) return previous;
-
       return previous.filter((_, index) => index !== closestIndex);
     });
   };
@@ -392,9 +496,7 @@ const SymbolCreation = () => {
     event: React.PointerEvent<HTMLDivElement>
   ) => {
     if (!drawingAreaRef.current) return;
-
     if (tool !== "eraser") return;
-
     const point = getPointerPoint(event, drawingAreaRef.current);
     eraseGeometryAtPoint(point);
   };
@@ -414,10 +516,10 @@ const SymbolCreation = () => {
     const value = current.value.trim();
 
     if (value) {
-      setOperations((previous) => [
+      setShapes((previous) => [
         ...previous,
         {
-          operation: "text",
+          kind: "text",
           text: value,
           position: current.point,
           fontSize,
@@ -476,7 +578,7 @@ const SymbolCreation = () => {
     if (tool !== "line" && tool !== "rectangle" && tool !== "ellipse") return;
 
     const currentPoint = getPointerPoint(event, drawingAreaRef.current);
-    setDragPreview(buildShapeOperations(dragStart, currentPoint));
+    setDragPreview(buildShape(dragStart, currentPoint));
   };
 
   const handleOverlayPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -484,96 +586,86 @@ const SymbolCreation = () => {
     if (tool !== "line" && tool !== "rectangle" && tool !== "ellipse") return;
 
     const endPoint = getPointerPoint(event, drawingAreaRef.current);
-    const nextOperations = buildShapeOperations(dragStart, endPoint);
+    const nextShapes = buildShape(dragStart, endPoint);
 
-    setOperations((previous) => [...previous, ...nextOperations]);
+    setShapes((previous) => [...previous, ...nextShapes]);
     setDragStart(null);
     setDragPreview([]);
   };
 
   const clearAll = () => {
     canvasRef.current?.clearCanvas();
-    setOperations([]);
+    setShapes([]);
     setDragStart(null);
     setDragPreview([]);
   };
 
   const undo = () => {
-    if (operations.length > 0) {
-      setOperations((previous) => previous.slice(0, -1));
+    if (shapes.length > 0) {
+      setShapes((previous) => previous.slice(0, -1));
       return;
     }
-
     canvasRef.current?.undo();
   };
 
   const saveSymbol = async () => {
     const id = slugify(symbolName) || `symbol-${Date.now()}`;
-
     const drawingElement = drawingAreaRef.current;
     if (!drawingElement || !canvasRef.current) return;
 
     const rect = drawingElement.getBoundingClientRect();
-
     const sketchPaths = await canvasRef.current.exportPaths();
-    const sketchOperations = sketchPathsToOperations(
+    const sketchShapes = sketchPathsToShapes(
       sketchPaths,
       rect.width,
       rect.height
     );
+    const finalShapes: SymbolShape[] = [...shapes, ...sketchShapes];
 
-    const finalOperations = [...operations, ...sketchOperations];
-
-    const symbolJson = {
-      collectionName: "symbols",
-      symbols: [
-        {
-          id,
-          name: symbolName.trim() || id,
-          operations: finalOperations,
-        },
-      ],
+    const symbolObject = {
+      name: symbolName.trim() || id,
+      model: buildModel(finalShapes),
+      elements: shapesToElements(finalShapes),
     };
+
+    // Top-level array matches the symbols.json collection format.
+    const symbolJson = [symbolObject];
 
     const jsonBlob = new Blob([JSON.stringify(symbolJson, null, 2)], {
       type: "application/json",
     });
-
     downloadBlob(jsonBlob, `${id}.json`);
+    await uploadSymbol(jsonBlob, `${id}.json`);
 
     const sketchPngDataUrl = await canvasRef.current.exportImage("png");
     const sketchImage = await loadImage(sketchPngDataUrl);
 
     const shapeSvgMarkup = `
       <svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS_SIZE}" height="${CANVAS_SIZE}" viewBox="0 0 ${CANVAS_SIZE} ${CANVAS_SIZE}">
-        ${operationsToSvgElements(operations)}
+        ${shapesToSvgElements(shapes)}
       </svg>
     `;
-
     const shapeSvgBlob = new Blob([shapeSvgMarkup], {
       type: "image/svg+xml;charset=utf-8",
     });
-
     const shapeSvgUrl = URL.createObjectURL(shapeSvgBlob);
     const shapeImage = await loadImage(shapeSvgUrl);
 
     const outputCanvas = document.createElement("canvas");
     outputCanvas.width = CANVAS_SIZE;
     outputCanvas.height = CANVAS_SIZE;
-
     const context = outputCanvas.getContext("2d");
     if (!context) return;
 
     context.fillStyle = "white";
     context.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-
     context.drawImage(sketchImage, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
     context.drawImage(shapeImage, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-    outputCanvas.toBlob((pngBlob) => {
+    outputCanvas.toBlob(async (pngBlob) => {
       if (!pngBlob) return;
-
       downloadBlob(pngBlob, `${id}.png`);
+      await uploadSymbol(pngBlob, `${id}.png`);
       URL.revokeObjectURL(shapeSvgUrl);
     }, "image/png");
   };
@@ -581,7 +673,6 @@ const SymbolCreation = () => {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <FloatingDockDemo />
-
       <main className="mx-auto flex w-full max-w-7xl gap-6 px-6 py-8">
         <section className="w-80 shrink-0 rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-xl">
           <div className="mb-6">
@@ -691,7 +782,6 @@ const SymbolCreation = () => {
             >
               Undo
             </button>
-
             <button
               type="button"
               onClick={clearAll}
@@ -723,11 +813,10 @@ const SymbolCreation = () => {
                 Drawing Canvas
               </h2>
               <p className="text-sm text-slate-400">
-                Marker strokes are saved as line operations. Ellipses are saved
-                as curve operations. Text is saved as a text operation.
+                Each shape is saved as one geometry element with a points array.
+                Rectangles and ellipses are closed; text is a text element.
               </p>
             </div>
-
             <div className="rounded-full border border-slate-700 bg-slate-950 px-4 py-2 text-sm text-slate-300">
               Active:{" "}
               <span className="font-semibold text-cyan-300">{tool}</span>
@@ -753,7 +842,7 @@ const SymbolCreation = () => {
                 />
               </div>
 
-              <SymbolPreview operations={[...operations, ...dragPreview]} />
+              <SymbolPreview shapes={[...shapes, ...dragPreview]} />
 
               {isOverlayTool && (
                 <div

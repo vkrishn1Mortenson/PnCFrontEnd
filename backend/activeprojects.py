@@ -10,6 +10,17 @@ import time
 from flask import send_file
 from io import BytesIO
 import mimetypes
+from azure.storage.filedatalake import DataLakeServiceClient, ContentSettings
+import os
+
+import json
+
+import posixpath
+
+from io import BytesIO
+
+from pypdf import PdfReader
+from flask import jsonify, request
 app = Flask(__name__)
 CORS(app)
 
@@ -101,6 +112,83 @@ query {
 """
 
 
+
+
+def _download_onelake_bytes(path: str) -> bytes:
+    """Download a OneLake file (Lakehouse Files path) into memory."""
+    file_system_client = onelake_service_client.get_file_system_client(
+        file_system=workspace_name
+    )
+    file_client = file_system_client.get_file_client(path)
+    return file_client.download_file().readall()
+
+
+def _measure_pdf_page(pdf_bytes: bytes, page_number: int = 1):
+    """Return (width_pt, height_pt) of the requested PDF page (1-indexed)."""
+    reader = PdfReader(BytesIO(pdf_bytes))
+    page = reader.pages[max(page_number - 1, 0)]
+    box = page.mediabox
+    return float(box.width), float(box.height)
+
+
+@app.route("/files/overlay", methods=["GET"])
+def get_overlay():
+    """
+    Return CV overlay JSON enriched with the coordinate-space dimensions
+    (pageWidth / pageHeight) taken from the PDF that the JSON was authored
+    against (its 'fileName' field). Nothing on Fabric is modified.
+    """
+    json_path = request.args.get("path")
+    if not json_path:
+        return jsonify({"error": "path is required"}), 400
+
+    try:
+        # 1. Load the CV JSON from OneLake.
+        raw = _download_onelake_bytes(json_path)
+        data = json.loads(raw)
+
+        # 2. Figure out which PDF the coordinates belong to.
+        source_pdf_name = data.get("fileName")
+        page_number = int(data.get("pageNumber", 1) or 1)
+
+        coord_w = None
+        coord_h = None
+        source_used = None
+
+        if source_pdf_name:
+            # CV_Output and Drawings are siblings under the project folder.
+            # e.g. .../Test1/CV_Output/x.json -> .../Test1/Drawings/<fileName>
+            cv_dir = posixpath.dirname(json_path)          # .../CV_Output
+            project_dir = posixpath.dirname(cv_dir)        # .../Test1
+            candidate = posixpath.join(
+                project_dir, "Drawings", source_pdf_name
+            )
+
+            try:
+                pdf_bytes = _download_onelake_bytes(candidate)
+                coord_w, coord_h = _measure_pdf_page(pdf_bytes, page_number)
+                source_used = candidate
+            except Exception as exc:
+                # Source PDF named in the JSON isn't present. Fall back below.
+                print(f"[overlay] source PDF '{candidate}' unavailable: {exc}")
+
+        # 3. Inject the coordinate space (only if we could measure it).
+        if coord_w and coord_h:
+            data["pageWidth"] = coord_w
+            data["pageHeight"] = coord_h
+            data["coordinateSource"] = source_used
+        else:
+            print(
+                f"[overlay] no coordinate space resolved for {json_path}; "
+                "frontend will fall back to its default."
+            )
+
+        return jsonify(data)
+
+    except Exception as exc:
+        print(f"[overlay] failed for {json_path}: {exc}")
+        return jsonify({"error": str(exc)}), 500
+
 def create_livy_session():
     global livy_session_id
 
@@ -164,7 +252,48 @@ def get_livy_session():
 
 
 
+symbol_upload_folder = "LH_DS_ENG_BRZ.Lakehouse/Files/Symbol Library"
 
+@app.route("/symbols/upload", methods=["POST"])
+def upload_symbol():
+    if "file" not in request.files:
+        return jsonify({"error": "file is required"}), 400
+
+    upload = request.files["file"]
+    if not upload.filename:
+        return jsonify({"error": "filename is required"}), 400
+
+    file_name = upload.filename
+    data = upload.read()
+
+    content_type = (
+        upload.mimetype
+        or mimetypes.guess_type(file_name)[0]
+        or "application/octet-stream"
+    )
+
+    try:
+        file_system_client = onelake_service_client.get_file_system_client(
+            file_system=workspace_name
+        )
+        file_client = file_system_client.get_file_client(
+            f"{symbol_upload_folder}/{file_name}"
+        )
+        file_client.upload_data(
+            data,
+            overwrite=True,
+            content_settings=ContentSettings(content_type=content_type),
+        )
+    except Exception as error:
+        return jsonify({"error": str(error)}), 500
+
+    return jsonify(
+        {
+            "status": "uploaded",
+            "path": f"{symbol_upload_folder}/{file_name}",
+            "size": len(data),
+        }
+    ), 201
 
 
 @app.route("/components/update", methods=["POST"])
@@ -643,7 +772,7 @@ def get_components():
 
 if __name__ == "__main__":
     create_livy_session()
-    print(app.url_map)
+    print(f"yo it's {app.url_map}")
     app.run(
     port=5000,
     debug=True,
