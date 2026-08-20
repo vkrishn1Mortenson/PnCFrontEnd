@@ -1,16 +1,24 @@
-# React + TypeScript + Vite + shadcn/ui
+# How to navigate
 
-This is a template for a new Vite project with React, TypeScript, and shadcn/ui.
+There are 3 branches in this repo: master, Excel_Scripts,Sharepoint_Metadata_extractor. They all have distinct purposes.
+## master
 
-## Adding components
+Contains the entire frontend ui for the P&C Automation Project 
 
-To add components to your app, run the following command:
+To build do the following: 
 
 ```bash
-npx shadcn@latest add button
+git clone https://github.com/vkrishn1Mortenson/PnCFrontEnd.git
 ```
-
-This will place the ui components in the `src/components` directory.
+Spawn 2 new terminals and run the following commands seperately
+```bash
+cd PnCFrontEnd
+npm install
+```
+```bash
+cd backend
+pip install -m requirements.txt
+```
 
 ## Using components
 
